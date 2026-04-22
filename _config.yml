@@ -1,0 +1,63 @@
+# Site settings
+title: blacksunCUBE
+description: Offensive & defensive security research
+author: blacksunCUBE
+url: "https://0xallow.github.io"
+baseurl: ""
+future: true
+
+# Build settings
+markdown: kramdown
+highlighter: rouge
+permalink: /:categories/:year/:month/:day/:title/
+
+# Social
+social:
+  discord:      "https://discord.gg/"
+  twitter:      "https://x.com/0xAllow"
+  hackthebox:   "https://profile.hackthebox.com/profile/019c3387-4b38-7299-a5ea-4916bfe0fefe"
+  github:       "https://github.com/0xallow"
+
+# Tag taxonomy  the canonical 4 tags. Posts declare `tags: [...]` in front matter
+# using the `slug` below. The UI renders the `label`.
+# Tag taxonomy — renamed from `tags` to avoid collision with Jekyll's reserved site.tags
+taxonomy:
+  - slug: "malware"
+    label: "Malware"
+  - slug: "edr-xdr"
+    label: "EDR/XDR"
+  - slug: "blue-team"
+    label: "Blue Team"
+  - slug: "red-team"
+    label: "Red Team"
+  - slug: "windows"
+    label: "Windows"
+  - slug: "linux"
+    label: "Linux"
+
+# Collections
+collections:
+  posts:
+    output: true
+
+# Defaults
+defaults:
+  - scope:
+      path: ""
+      type: "posts"
+    values:
+      layout: "post"
+
+# Exclude
+exclude:
+  - README.md
+  - Gemfile
+  - Gemfile.lock
+  - node_modules
+  - vendor
+
+# Plugins
+plugins:
+  - jekyll-feed
+  - jekyll-seo-tag
+  - jekyll-sitemap
