@@ -39,6 +39,9 @@ taxonomy:
 collections:
   posts:
     output: true
+  notebook:
+    output: true
+    permalink: /notebook/:path/
 
 # Defaults
 defaults:
@@ -47,6 +50,11 @@ defaults:
       type: "posts"
     values:
       layout: "post"
+  - scope:
+      path: ""
+      type: "notebook"
+    values:
+      layout: "notebook"
 
 # Exclude
 exclude:
