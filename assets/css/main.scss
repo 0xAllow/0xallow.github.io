@@ -1081,56 +1081,7 @@ main {
 }
 
 /* ============================================================
-   Per-post share button (row-share) + post list aside
-   ============================================================ */
-.post-list__aside {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  position: relative;
-  z-index: 3;
-}
-
-.row-share {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: 50%;
-  color: var(--text-subtle);
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity var(--dur-fast) var(--ease),
-              border-color var(--dur-fast) var(--ease),
-              color var(--dur-fast) var(--ease),
-              background-color var(--dur-fast) var(--ease),
-              transform var(--dur-fast) var(--ease);
-}
-.row-share svg { width: 12px; height: 12px; }
-
-.post-list__item:hover .row-share,
-.post-list__item:focus-within .row-share,
-.row-share:focus-visible {
-  opacity: 1;
-}
-.row-share:hover {
-  border-color: var(--border-strong);
-  color: var(--text);
-  background: var(--bg-subtle);
-}
-.row-share:active { transform: scale(0.92); }
-
-/* Always visible on touch devices where :hover doesn't apply */
-@media (hover: none) {
-  .row-share { opacity: 1; }
-}
-
-/* ============================================================
-   Field Notebook — index page
+   Field Notebook — index page (responsive card grid)
    ============================================================ */
 .nb-volume {
   margin-bottom: var(--sp-7);
@@ -1150,6 +1101,7 @@ main {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-subtle);
+  white-space: nowrap;
 }
 .nb-volume__line {
   flex: 1;
@@ -1157,9 +1109,11 @@ main {
   background: var(--border);
 }
 
+/* Responsive grid: 1 col mobile, 2 cols tablet, 3 cols desktop */
 .nb-grid {
   list-style: none;
-  padding: 0; margin: 0;
+  padding: 0;
+  margin: 0;
   display: grid;
   grid-template-columns: 1fr;
   gap: var(--sp-4);
@@ -1172,7 +1126,6 @@ main {
 }
 
 .nb-card {
-  position: relative;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
@@ -1191,10 +1144,11 @@ main {
   display: flex;
   flex-direction: column;
   padding: var(--sp-5);
-  gap: var(--sp-2);
-  min-height: 180px;
+  gap: 6px;
+  min-height: 200px;
   color: var(--text);
   text-decoration: none;
+  height: 100%;
 }
 
 .nb-card__meta {
@@ -1207,15 +1161,18 @@ main {
   letter-spacing: 0.02em;
   margin-bottom: 6px;
 }
-.nb-card__vol { text-transform: uppercase; letter-spacing: 0.08em; }
+.nb-card__vol {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
 .nb-card__sep { opacity: 0.5; }
 
 .nb-card__title {
-  font-size: 1.125rem;
+  font-size: 1.0625rem;
   font-weight: 600;
-  letter-spacing: -0.018em;
+  letter-spacing: -0.015em;
   line-height: 1.3;
-  margin-bottom: 4px;
+  margin: 0 0 4px;
 }
 
 .nb-card__desc {
@@ -1223,6 +1180,7 @@ main {
   color: var(--text-muted);
   line-height: 1.5;
   flex: 1;
+  margin: 0;
 }
 
 .nb-card__cta {
@@ -1235,108 +1193,10 @@ main {
   color: var(--accent);
 }
 .nb-card__cta svg {
-  width: 12px; height: 12px;
+  width: 12px;
+  height: 12px;
   transition: transform var(--dur-fast) var(--ease);
 }
-.nb-card:hover .nb-card__cta svg { transform: translate(2px, -2px); }
-
-/* ============================================================
-   Field Notebook — entry page (protected)
-   ============================================================ */
-.nb-entry {
-  /* Global selection block on protected container.
-     JS reinforces this; CSS alone is bypassable. */
-  -webkit-user-select: none;
-  -moz-user-select: none;
-  -ms-user-select: none;
-  user-select: none;
-  -webkit-touch-callout: none;
-  -webkit-tap-highlight-color: transparent;
-}
-
-/* Images: disable dragging + right-click-save hint (cosmetic) */
-.nb-entry img {
-  -webkit-user-drag: none;
-  pointer-events: none; /* prevents "save image as" via right click on image */
-}
-
-.nb-entry a, .nb-entry button {
-  /* Interactive elements remain interactive */
-  -webkit-user-select: auto;
-  user-select: auto;
-  pointer-events: auto;
-}
-
-.nb-backlink {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: var(--fs-small);
-  color: var(--text-muted);
-  margin-bottom: var(--sp-4);
-  transition: color var(--dur-fast) var(--ease);
-}
-.nb-backlink:hover { color: var(--text); }
-.nb-backlink svg { width: 14px; height: 14px; }
-
-.nb-entry__meta {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-bottom: var(--sp-3);
-}
-.nb-entry__tag {
-  font-family: var(--font-mono);
-  font-size: var(--fs-micro);
-  letter-spacing: 0.04em;
-  color: var(--text-subtle);
-}
-.nb-entry__tag--strong {
-  color: var(--accent);
-  font-weight: 500;
-}
-
-.nb-entry__title { margin-bottom: var(--sp-3); }
-
-.nb-entry__body {
-  /* Make it harder to select by screen readers that respect user-select */
-  position: relative;
-}
-.nb-entry__body::selection,
-.nb-entry__body *::selection {
-  background: transparent;
-  color: inherit;
-}
-
-.nb-entry__foot {
-  margin-top: var(--sp-7);
-  padding-top: var(--sp-4);
-  border-top: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
-}
-@media (min-width: 640px) {
-  .nb-entry__foot {
-    flex-direction: row;
-    justify-content: space-between;
-    align-items: center;
-  }
-}
-.nb-entry__foot-note {
-  font-family: var(--font-mono);
-  font-size: var(--fs-micro);
-  color: var(--text-subtle);
-}
-
-/* Print protection — blank the content if user tries to print */
-@media print {
-  .nb-entry .prose { display: none !important; }
-  .nb-entry::after {
-    content: "This Field Notebook entry is not licensed for print reproduction. View at " attr(data-canonical-url) " — © blacksunCUBE";
-    display: block;
-    padding: 40mm 20mm;
-    font-family: serif;
-    color: #000;
-  }
+.nb-card:hover .nb-card__cta svg {
+  transform: translate(2px, -2px);
 }
