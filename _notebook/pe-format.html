@@ -1,3 +1,12 @@
+---
+layout: null
+title: "The PE Format"
+volume: "02"
+entry: "01"
+order: 201
+date: 2026-04-22
+description: "An operator's map of the Portable Executable format."
+---
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -623,6 +632,49 @@
   .end .sig { color: var(--exec); font-weight: 700; letter-spacing: 0.15em; }
 
   ::selection { background: var(--pen); color: var(--bg); }
+
+  /* ============== Mobile responsive patch ============== */
+  @media (max-width: 720px) {
+    body { font-size: 16px; line-height: 1.6; }
+    .wrap { padding: 48px 18px 100px; }
+    h1 { font-size: 32px !important; line-height: 1.1; }
+    .dek { font-size: 17px; }
+    h2 { font-size: 22px; flex-wrap: wrap; gap: 8px; }
+    h2 .num { font-size: 11px; }
+    h2 + .sub { font-size: 15px; }
+    h3 { font-size: 16px; }
+    .card { padding: 18px 16px; margin: 18px 0; }
+    .card-head { gap: 8px; }
+    .card-head .type-name { font-size: 16px; word-break: break-all; }
+    .tags { margin-left: 0; flex-wrap: wrap; }
+    pre {
+      font-size: 12px;
+      padding: 12px 14px;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .legend, .legend-item { padding: 16px 14px; }
+    .twin { gap: 10px; }
+    .take { padding: 14px 14px; }
+    table { font-size: 13px; }
+    th, td { padding: 8px 10px; }
+    td:first-child { width: auto; }
+    .diagram { padding: 16px 14px; }
+    .flow { flex-direction: column; }
+    .flow .arrow { padding: 6px 0; align-self: center; transform: rotate(90deg); }
+    .flow .box { width: 100%; }
+    .end { flex-direction: column; align-items: flex-start; }
+    .masthead { padding: 16px 0 14px; margin-bottom: 48px; }
+    .masthead .brand { font-size: 11px; }
+    .byline { margin-bottom: 56px; padding-bottom: 28px; font-size: 11px; }
+  }
+
+  /* Tablet adjustments */
+  @media (min-width: 721px) and (max-width: 920px) {
+    .wrap { padding: 64px 24px 120px; }
+    h1 { font-size: clamp(36px, 6vw, 50px); }
+  }
+
 </style>
 </head>
 <body>
