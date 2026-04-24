@@ -1,0 +1,980 @@
+---
+layout: null
+title: "Windows Data Types — a field notebook"
+volume: "01"
+entry: "windows-data-types"
+order: 1
+description: "A reading of the Windows type system through the only three verbs that matter when you are attacking or defending a process: read, write, execute."
+---
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Windows Data Types — a field notebook</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    /* base canvas — a dark graphite, not pure black */
+    --bg: #14161a;
+    --bg-soft: #1b1e24;
+    --bg-card: #1f232a;
+    --ink: #e8e4d8;           /* aged-paper foreground */
+    --ink-dim: #a8a396;
+    --ink-faint: #6d6a5f;
+    --rule: #2b2f38;
+
+    /* the three semantic axes — Read / Write / Execute */
+    --read:  #5ec2e0;         /* cold blue — inspection, the "eye" */
+    --read-bg: rgba(94,194,224,0.10);
+    --read-border: rgba(94,194,224,0.38);
+
+    --write: #e8b64a;          /* warm amber — mutation, the "hand" */
+    --write-bg: rgba(232,182,74,0.10);
+    --write-border: rgba(232,182,74,0.42);
+
+    --exec:  #e8624a;          /* hot red — execution, the "trigger" */
+    --exec-bg: rgba(232,98,74,0.10);
+    --exec-border: rgba(232,98,74,0.42);
+
+    /* annotation color — like a red-pen marker in the margin */
+    --pen:   #d9456b;
+    --pen-bg: rgba(217,69,107,0.10);
+
+    --mono: 'JetBrains Mono', ui-monospace, monospace;
+    --serif: 'Crimson Pro', 'Iowan Old Style', 'Palatino', serif;
+    --sans: 'Space Grotesk', system-ui, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--serif);
+    font-size: 18px;
+    line-height: 1.65;
+    /* subtle paper-grain texture using layered radial gradients */
+    background-image:
+      radial-gradient(circle at 20% 10%, rgba(94,194,224,0.04) 0%, transparent 40%),
+      radial-gradient(circle at 85% 80%, rgba(232,98,74,0.04) 0%, transparent 45%),
+      repeating-linear-gradient(0deg, transparent 0, transparent 2px, rgba(255,255,255,0.006) 2px, rgba(255,255,255,0.006) 3px);
+    min-height: 100vh;
+  }
+
+  /* subtle grain overlay using SVG noise */
+  body::before {
+    content: "";
+    position: fixed; inset: 0;
+    pointer-events: none;
+    opacity: 0.035;
+    z-index: 0;
+    background-image: url("data:image/svg+xml;utf8,<svg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  }
+
+  .wrap {
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 80px 32px 160px;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* ------------- masthead ------------- */
+  .masthead {
+    border-top: 2px solid var(--ink);
+    border-bottom: 1px solid var(--rule);
+    padding: 22px 0 18px;
+    margin-bottom: 72px;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+  .masthead .brand {
+    font-family: var(--sans);
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    font-size: 12px;
+    color: var(--ink-dim);
+  }
+  .masthead .brand span { color: var(--exec); }
+  .masthead .meta {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-faint);
+    letter-spacing: 0.05em;
+  }
+
+  h1 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: clamp(42px, 6vw, 64px);
+    line-height: 1.05;
+    letter-spacing: -0.015em;
+    margin: 0 0 14px;
+    color: var(--ink);
+  }
+  h1 em {
+    font-style: italic;
+    color: var(--ink-dim);
+    font-weight: 400;
+  }
+  .dek {
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 21px;
+    color: var(--ink-dim);
+    max-width: 640px;
+    margin: 0 0 24px;
+    line-height: 1.45;
+  }
+  .byline {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-faint);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 80px;
+    padding-bottom: 40px;
+    border-bottom: 1px dashed var(--rule);
+  }
+  .byline em {
+    color: var(--pen);
+    font-style: normal;
+  }
+
+  h2 {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 26px;
+    letter-spacing: -0.01em;
+    margin: 80px 0 6px;
+    color: var(--ink);
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+  }
+  h2 .num {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--ink-faint);
+    letter-spacing: 0.1em;
+  }
+  h2 + .sub {
+    font-family: var(--serif);
+    font-style: italic;
+    color: var(--ink-dim);
+    margin: 0 0 32px;
+    font-size: 17px;
+  }
+
+  h3 {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 17px;
+    letter-spacing: 0.01em;
+    margin: 36px 0 10px;
+    color: var(--ink);
+  }
+
+  p { margin: 0 0 18px; }
+
+  code, .kw {
+    font-family: var(--mono);
+    font-size: 0.86em;
+    background: var(--bg-soft);
+    padding: 2px 6px;
+    border-radius: 3px;
+    color: var(--ink);
+    border: 1px solid var(--rule);
+  }
+
+  strong { color: var(--ink); font-weight: 600; }
+  em.pen { color: var(--pen); font-style: italic; font-weight: 500; }
+
+  /* ---------- legend: the key that grounds the whole page ---------- */
+  .legend {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0;
+    margin: 0 0 56px;
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    overflow: hidden;
+    background: var(--bg-card);
+  }
+  .legend-item {
+    padding: 24px 22px;
+    border-right: 1px solid var(--rule);
+    position: relative;
+  }
+  .legend-item:last-child { border-right: none; }
+  .legend-item .tag {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 2px;
+  }
+  .legend-item.r .tag { background: var(--read-bg); color: var(--read); border: 1px solid var(--read-border); }
+  .legend-item.w .tag { background: var(--write-bg); color: var(--write); border: 1px solid var(--write-border); }
+  .legend-item.x .tag { background: var(--exec-bg); color: var(--exec); border: 1px solid var(--exec-border); }
+
+  .legend-item h4 {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 15px;
+    margin: 0 0 6px;
+    color: var(--ink);
+  }
+  .legend-item p {
+    font-family: var(--serif);
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--ink-dim);
+    margin: 0;
+  }
+
+  @media (max-width: 680px) {
+    .legend { grid-template-columns: 1fr; }
+    .legend-item { border-right: none; border-bottom: 1px solid var(--rule); }
+    .legend-item:last-child { border-bottom: none; }
+  }
+
+  /* ---------- the type-card: the atomic unit of the piece ---------- */
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--rule);
+    border-radius: 3px;
+    padding: 24px 26px;
+    margin: 24px 0;
+    position: relative;
+  }
+  .card.read  { border-left-color: var(--read); }
+  .card.write { border-left-color: var(--write); }
+  .card.exec  { border-left-color: var(--exec); }
+  .card.mixed { 
+    border-left: 3px solid transparent;
+    border-image: linear-gradient(180deg, var(--read) 0%, var(--write) 50%, var(--exec) 100%) 1;
+  }
+
+  .card-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+  .card-head .type-name {
+    font-family: var(--mono);
+    font-weight: 700;
+    font-size: 18px;
+    color: var(--ink);
+  }
+  .tags {
+    display: flex;
+    gap: 6px;
+    margin-left: auto;
+  }
+  .pill {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    padding: 3px 8px;
+    border-radius: 2px;
+    text-transform: uppercase;
+  }
+  .pill.r { background: var(--read-bg); color: var(--read); border: 1px solid var(--read-border); }
+  .pill.w { background: var(--write-bg); color: var(--write); border: 1px solid var(--write-border); }
+  .pill.x { background: var(--exec-bg); color: var(--exec); border: 1px solid var(--exec-border); }
+
+  .gloss {
+    font-family: var(--serif);
+    font-style: italic;
+    color: var(--ink-dim);
+    font-size: 15px;
+    margin: 0 0 12px;
+  }
+
+  /* ---------- code blocks ---------- */
+  pre {
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.6;
+    background: #0f1116;
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    padding: 16px 18px;
+    overflow-x: auto;
+    margin: 14px 0;
+    color: #cdd1d8;
+  }
+  pre .c  { color: var(--ink-faint); font-style: italic; }    /* comment */
+  pre .k  { color: #b98dd0; }                                  /* keyword */
+  pre .t  { color: #7dc9a9; }                                  /* type */
+  pre .s  { color: #d8b36b; }                                  /* string */
+  pre .n  { color: #e89069; }                                  /* number */
+  pre .fn { color: #6db6d6; }                                  /* function */
+  pre .m  { color: var(--pen); }                               /* macro / pen highlight */
+
+  /* inline highlights matching the RWX axes */
+  .hl-r { background: var(--read-bg); color: var(--read); padding: 1px 4px; border-radius: 2px; }
+  .hl-w { background: var(--write-bg); color: var(--write); padding: 1px 4px; border-radius: 2px; }
+  .hl-x { background: var(--exec-bg); color: var(--exec); padding: 1px 4px; border-radius: 2px; }
+
+  /* ---------- margin notes (researcher's "pen in the margin") ---------- */
+  .margin {
+    border-left: 2px solid var(--pen);
+    background: var(--pen-bg);
+    padding: 14px 16px 14px 18px;
+    margin: 20px 0;
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 15px;
+    color: var(--ink);
+    line-height: 1.55;
+    position: relative;
+  }
+  .margin::before {
+    content: "margin note";
+    position: absolute;
+    top: -9px;
+    left: 14px;
+    background: var(--bg);
+    padding: 0 8px;
+    font-family: var(--mono);
+    font-size: 10px;
+    font-style: normal;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--pen);
+  }
+
+  /* dual-column: offensive / detection take */
+  .twin {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin: 20px 0;
+  }
+  @media (max-width: 680px) { .twin { grid-template-columns: 1fr; } }
+  .take {
+    background: var(--bg-soft);
+    border: 1px solid var(--rule);
+    padding: 16px 18px;
+    border-radius: 3px;
+  }
+  .take h5 {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    margin: 0 0 10px;
+  }
+  .take.red h5    { color: var(--exec); }
+  .take.blue h5   { color: var(--read); }
+  .take p { font-size: 14px; line-height: 1.55; margin: 0; color: var(--ink-dim); }
+  .take p strong { color: var(--ink); }
+
+  /* ---------- table ---------- */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 24px 0;
+    font-size: 14px;
+  }
+  th, td {
+    text-align: left;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+  }
+  th {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+    border-bottom: 2px solid var(--ink);
+  }
+  td { font-family: var(--serif); color: var(--ink); }
+  td:first-child {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--ink);
+    width: 28%;
+  }
+
+  /* ---------- diagram: handle table ---------- */
+  .diagram {
+    margin: 28px 0;
+    padding: 24px;
+    background: #0f1116;
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+  }
+  .diagram .caption {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-bottom: 16px;
+  }
+
+  .flow {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    flex-wrap: wrap;
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+  .flow .box {
+    flex: 1;
+    min-width: 140px;
+    background: var(--bg-card);
+    border: 1px solid var(--rule);
+    padding: 12px 14px;
+    position: relative;
+  }
+  .flow .box .label {
+    font-family: var(--sans);
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-bottom: 6px;
+  }
+  .flow .box .val { color: var(--ink); font-weight: 500; }
+  .flow .arrow {
+    display: flex;
+    align-items: center;
+    padding: 0 10px;
+    color: var(--ink-faint);
+    font-size: 14px;
+  }
+
+  /* pretty rule */
+  .rule {
+    border: none;
+    border-top: 1px dashed var(--rule);
+    margin: 64px 0;
+    position: relative;
+    text-align: center;
+  }
+  .rule::after {
+    content: "§";
+    position: absolute;
+    top: -14px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg);
+    padding: 0 14px;
+    color: var(--ink-faint);
+    font-family: var(--serif);
+    font-size: 20px;
+  }
+
+  /* callout */
+  .callout {
+    background: linear-gradient(180deg, var(--bg-card) 0%, var(--bg-soft) 100%);
+    border: 1px solid var(--rule);
+    border-top: 3px solid var(--pen);
+    padding: 22px 24px;
+    margin: 32px 0;
+    border-radius: 3px;
+  }
+  .callout .label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--pen);
+    margin-bottom: 8px;
+  }
+  .callout p:last-child { margin-bottom: 0; }
+
+  /* footer */
+  .end {
+    margin-top: 100px;
+    padding-top: 40px;
+    border-top: 2px solid var(--ink);
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-faint);
+    letter-spacing: 0.05em;
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .end .sig { color: var(--exec); font-weight: 700; letter-spacing: 0.15em; }
+
+  /* anchor the reading-axis key visually */
+  ::selection { background: var(--pen); color: var(--bg); }
+
+  /* ---------- back to index link (notebook integration) ---------- */
+  .nb-back {
+    margin-bottom: 32px;
+    padding-bottom: 0;
+  }
+  .nb-back a {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .nb-back a:hover {
+    color: var(--pen);
+    border-bottom-color: var(--pen);
+  }
+  .nb-back a::before {
+    content: "← ";
+    margin-right: 4px;
+  }
+
+  /* ---------- toast for blocked-copy notification ---------- */
+  .nb-toast {
+    position: fixed;
+    left: 50%;
+    bottom: 32px;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--bg-card);
+    border: 1px solid var(--pen);
+    color: var(--ink);
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    padding: 10px 18px;
+    border-radius: 3px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.18s ease, transform 0.18s ease;
+    z-index: 9999;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+  }
+  .nb-toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+
+</style>
+</head>
+<body data-nb-protected>
+<div class="wrap">
+
+  <!-- ========== BACK TO INDEX ========== -->
+  <nav class="nb-back"><a href="/notebook/">back to notebook</a></nav>
+
+  <!-- ========== MASTHEAD ========== -->
+  <header class="masthead">
+    <div class="brand">blacksun<span>CUBE</span> &nbsp;·&nbsp; field notebook</div>
+    <div class="meta">vol. 01 / entry: windows types</div>
+  </header>
+
+  <h1>Windows Data Types,<br><em>as they actually behave in memory.</em></h1>
+  <p class="dek">A reading of the Windows type system through the only three verbs that matter when you are attacking or defending a process: <strong>read</strong>, <strong>write</strong>, <strong>execute</strong>.</p>
+  <div class="byline">a primer for operators &mdash; <em>not a textbook</em></div>
+
+  <!-- ========== OPENING THOUGHT ========== -->
+  <p>Here is the thing that took me too long to admit out loud: nobody is confused by <code>int</code> or <code>char*</code>. What slows people down on Windows is a <em class="pen">cosmetic</em> problem pretending to be a technical one. <code>LPCWSTR</code>, <code>PHANDLE</code>, <code>ULONG_PTR</code> &mdash; these are not new types. They are thirty years of naming conventions layered on top of ordinary C primitives, and once you see through the names, the whole API surface becomes flat and legible.</p>
+
+  <p>I want to give you a mental model I wish someone had given me. We will read every type through three axes. Ignore them and the docs look like a wall of noise. Keep them in the back of your head and <code>CreateFileW</code>'s signature reads like an English sentence.</p>
+
+  <!-- ========== THE LEGEND ========== -->
+  <div class="legend">
+    <div class="legend-item r">
+      <span class="tag">R &middot; Read</span>
+      <h4>Inspection, no side effects</h4>
+      <p>The type represents something you only <em>look at</em>: a size, a flag value, a constant string. The callee will not touch your memory through it.</p>
+    </div>
+    <div class="legend-item w">
+      <span class="tag">W &middot; Write</span>
+      <h4>Mutation through a pointer</h4>
+      <p>The type is a pointer the API will <em>write through</em>. You are handing the callee a place to put something. Out-parameters live here.</p>
+    </div>
+    <div class="legend-item x">
+      <span class="tag">X &middot; Execute</span>
+      <h4>An identity the kernel will act on</h4>
+      <p>The type refers to a live kernel object or a region of executable memory. Touching it causes <em>the OS to do work</em> &mdash; files opened, threads created, code run.</p>
+    </div>
+  </div>
+
+  <p>Every Windows type on this page gets tagged with one or more of these. Not because Microsoft tags them that way &mdash; they don't &mdash; but because this is how your brain needs to encode them if you want to read disassembly without a dictionary.</p>
+
+  <!-- ========== SECTION 1: THE DWORD AND ITS FAMILY ========== -->
+  <h2><span class="num">§ 01</span> Integers, or: what a <code>DWORD</code> really is</h2>
+  <p class="sub">The 32-bit unsigned that got its name from a dead memory model.</p>
+
+  <p>Start here because half the API surface is integers with a fancy coat. The name <code>DWORD</code> dates from the 16-bit era, where a <em>word</em> was 16 bits and a <em>double word</em> was 32. On modern Windows, both 32-bit and 64-bit, a <code>DWORD</code> is still exactly what it was in 1985: a 32-bit unsigned integer. Range zero to <code>0xFFFFFFFF</code>. That's it. That's the type.</p>
+
+  <div class="card read">
+    <div class="card-head">
+      <span class="type-name">DWORD</span>
+      <div class="tags"><span class="pill r">read</span></div>
+    </div>
+    <p class="gloss">"I am a 32-bit unsigned value. Copy me, compare me, don't dereference me."</p>
+<pre><span class="t">DWORD</span> dwFlags = <span class="n">0x40</span>;   <span class="c">// PAGE_EXECUTE_READWRITE</span>
+<span class="t">DWORD</span> pid     = <span class="fn">GetCurrentProcessId</span>();
+<span class="t">DWORD</span> err     = <span class="fn">GetLastError</span>();</pre>
+    <p>You will meet <code>DWORD</code> as: flag arguments, process IDs, error codes, access masks, sizes of small things. The Hungarian prefix <code>dw</code> in <code>dwDesiredAccess</code> tells you at a glance: this is a DWORD, a 32-bit bitmask.</p>
+  </div>
+
+  <div class="twin">
+    <div class="take red">
+      <h5>&rarr; operator's view</h5>
+      <p>Access-mask DWORDs are where your tooling lives or dies. <code>PROCESS_ALL_ACCESS</code> is <code>0x1FFFFF</code> &mdash; a neon sign for any half-decent EDR. <strong>Request only what you need.</strong> <code>PROCESS_QUERY_LIMITED_INFORMATION</code> (<code>0x1000</code>) is almost free, visible in nobody's high-priority rules.</p>
+    </div>
+    <div class="take blue">
+      <h5>&rarr; defender's view</h5>
+      <p>The DWORD on the wire <strong>is the telemetry</strong>. Sysmon Event 10 surfaces <code>GrantedAccess</code> as hex. A rule that fires only on <code>GrantedAccess</code> masks containing <code>0x10 | 0x400</code> (VM_READ + QUERY_INFORMATION) against <code>lsass.exe</code> catches every textbook credential dumper and almost no legitimate software.</p>
+    </div>
+  </div>
+
+  <div class="card read">
+    <div class="card-head">
+      <span class="type-name">WORD, BYTE</span>
+      <div class="tags"><span class="pill r">read</span></div>
+    </div>
+    <p class="gloss">Smaller integers. Rare at the public API; everywhere inside PE headers.</p>
+<pre><span class="t">WORD</span>  machine    = pNtHeaders-&gt;FileHeader.Machine;   <span class="c">// 0x8664 = x64</span>
+<span class="t">BYTE</span>  firstByte  = pShellcode[<span class="n">0</span>];                   <span class="c">// e.g. 0xEB (jmp)</span></pre>
+  </div>
+
+  <div class="card read">
+    <div class="card-head">
+      <span class="type-name">SIZE_T</span>
+      <div class="tags"><span class="pill r">read</span></div>
+    </div>
+    <p class="gloss">"I am an integer large enough to measure any object in this address space."</p>
+<pre><span class="t">SIZE_T</span> regionSize = <span class="n">0x1000</span>;
+<span class="fn">NtAllocateVirtualMemory</span>(hProc, &amp;base, <span class="n">0</span>, &amp;regionSize, ...);</pre>
+    <p>Here is what matters: <code>SIZE_T</code> is <strong>32 bits on x86, 64 bits on x64</strong>. Mix it up with <code>DWORD</code> when you are building a 64-bit loader and you will silently truncate anything above 4&nbsp;GiB. The bug will not show up in your test VM. It will show up the day you try to map something real.</p>
+  </div>
+
+  <div class="card mixed">
+    <div class="card-head">
+      <span class="type-name">ULONG_PTR</span>
+      <div class="tags"><span class="pill r">read</span><span class="pill w">write</span></div>
+    </div>
+    <p class="gloss">"I am a pointer dressed up as an integer, so the compiler will let you do arithmetic on me."</p>
+<pre><span class="t">PVOID</span> pBase = <span class="fn">VirtualAlloc</span>(NULL, <span class="n">0x1000</span>, MEM_COMMIT, PAGE_READWRITE);
+
+<span class="c">// pBase = pBase + 0x10;                       // won't compile — void* has no size</span>
+pBase = (<span class="t">PVOID</span>)((<span class="t">ULONG_PTR</span>)pBase + <span class="n">0x10</span>);  <span class="c">// cast, add, cast back</span></pre>
+    <p>This is the canonical move in every manual mapper, every reflective loader, every hooking trampoline: cast a pointer to <code>ULONG_PTR</code>, do math, cast back. If you see this in someone else's shellcode stub, they are walking a structure (usually a PE) by hand.</p>
+  </div>
+
+  <hr class="rule">
+
+  <!-- ========== SECTION 2: POINTERS ========== -->
+  <h2><span class="num">§ 02</span> <code>VOID</code>, <code>PVOID</code>, and the <code>P</code> convention</h2>
+  <p class="sub">The single most useful naming rule in the entire API.</p>
+
+  <p>Here is the one rule that, once internalized, makes <em>every</em> Windows function signature parseable at a glance:</p>
+
+  <div class="callout">
+    <div class="label">the rule</div>
+    <p style="font-family: var(--sans); font-size: 18px; color: var(--ink);">If a type name starts with <code style="font-size: 16px;">P</code>, it is a <strong>pointer to</strong> the type without the <code style="font-size: 16px;">P</code>.</p>
+    <p style="font-family: var(--serif); font-style: italic; color: var(--ink-dim); font-size: 15px; margin-top: 10px;">That is the entire rule. <code>PHANDLE</code> is <code>HANDLE*</code>. <code>PDWORD</code> is <code>DWORD*</code>. <code>PSIZE_T</code> is <code>SIZE_T*</code>. An <code>LP</code> prefix means the same thing &mdash; "long pointer" &mdash; a leftover from 16-bit segmented memory that no longer means anything on x86/x64.</p>
+  </div>
+
+  <p>Which means that whenever you see a <code>P</code>-type in a function signature, you are looking at either an input-by-reference or an <span class="hl-w">out-parameter</span>. The function will either read through that pointer or <em>write through it</em>. That is not a stylistic detail; it is the difference between a parameter you initialize and one you just declare.</p>
+
+  <div class="card write">
+    <div class="card-head">
+      <span class="type-name">PVOID  /  LPVOID</span>
+      <div class="tags"><span class="pill r">read</span><span class="pill w">write</span></div>
+    </div>
+    <p class="gloss">"I am <code>void*</code>. I point to bytes; you decide what they mean."</p>
+<pre><span class="t">PVOID</span>  pBuffer = <span class="fn">VirtualAlloc</span>(NULL, <span class="n">4096</span>, ..., PAGE_READWRITE);
+<span class="t">LPVOID</span> pDest   = (<span class="t">LPVOID</span>)<span class="n">0x1400000000</span>;
+<span class="fn">WriteProcessMemory</span>(hProc, pDest, pBuffer, <span class="n">4096</span>, NULL);</pre>
+    <p><code>PVOID</code> is the universal "pointer to anything" type. It is the return type of <code>VirtualAlloc</code>, the destination in <code>WriteProcessMemory</code>, the shellcode buffer in your manual mapper. On x64 it is 8 bytes. Always.</p>
+  </div>
+
+  <div class="margin">
+    If you catch yourself writing <code>LPVOID</code> in a greenfield project, you are imitating old code. It is identical to <code>PVOID</code>, which is identical to <code>void*</code>. Pick one and stop caring.
+  </div>
+
+  <hr class="rule">
+
+  <!-- ========== SECTION 3: HANDLES ========== -->
+  <h2><span class="num">§ 03</span> <code>HANDLE</code>: the thing that makes Windows Windows</h2>
+  <p class="sub">Not a pointer. Not an integer. An <em>index</em> into a per-process table the kernel owns.</p>
+
+  <p>If you only remember one concept from this whole notebook, make it this one. A <code>HANDLE</code> is not a raw pointer, and it is not a plain number. It is a <strong>token</strong> that the kernel hands you in exchange for you asking to touch something it owns: a file, a process, a thread, a registry key, a mutex, a section, an access token, a pipe.</p>
+
+  <div class="diagram">
+    <div class="caption">user-mode &nbsp;→&nbsp; kernel translation</div>
+    <div class="flow">
+      <div class="box">
+        <div class="label">your code</div>
+        <div class="val" style="color: var(--read);">HANDLE hProc = 0x2AC</div>
+      </div>
+      <div class="arrow">&rarr;</div>
+      <div class="box">
+        <div class="label">EPROCESS.ObjectTable</div>
+        <div class="val">[entry 0x2AC]</div>
+      </div>
+      <div class="arrow">&rarr;</div>
+      <div class="box">
+        <div class="label">kernel object</div>
+        <div class="val" style="color: var(--exec);">EPROCESS &nbsp;(lsass.exe)</div>
+      </div>
+    </div>
+    <p style="font-family: var(--serif); font-style: italic; color: var(--ink-dim); font-size: 14px; margin-top: 16px; margin-bottom: 0;">The handle value you hold in user mode is an index into your process's private handle table. The kernel dereferences it on every call. A <code>HANDLE</code> value of <code>0x2AC</code> in one process is meaningless &mdash; or refers to something completely different &mdash; in another.</p>
+  </div>
+
+  <div class="card exec">
+    <div class="card-head">
+      <span class="type-name">HANDLE</span>
+      <div class="tags"><span class="pill x">execute</span></div>
+    </div>
+    <p class="gloss">"I am a receipt. Give me back to the kernel and it will do something on your behalf."</p>
+<pre><span class="t">HANDLE</span> hFile = <span class="fn">CreateFileW</span>(L<span class="s">"C:\\temp\\notes.txt"</span>,
+                         GENERIC_READ,       <span class="c">// DWORD access mask</span>
+                         <span class="n">0</span>, NULL,
+                         OPEN_EXISTING,
+                         FILE_ATTRIBUTE_NORMAL,
+                         NULL);
+
+<span class="k">if</span> (hFile == INVALID_HANDLE_VALUE) {
+    <span class="c">// on x64 this is (HANDLE)-1  ==  0xFFFFFFFFFFFFFFFF</span>
+    <span class="c">// NOT the same as NULL, which most other APIs return on failure</span>
+    <span class="fn">printf</span>(<span class="s">"[-] CreateFileW failed: %lu\n"</span>, <span class="fn">GetLastError</span>());
+}
+
+...
+<span class="fn">CloseHandle</span>(hFile);   <span class="c">// leaked handles are a bug *and* a telemetry tell</span></pre>
+  </div>
+
+  <div class="callout">
+    <div class="label">the footgun</div>
+    <p><code>INVALID_HANDLE_VALUE</code> (from the <code>CreateFile*</code> family) is <strong>not</strong> <code>NULL</code>. It is <code>-1</code>. Most other Windows APIs return <code>NULL</code> to signal failure. Mix these up and your error-check silently passes on a failed call. I have watched this bug eat an entire afternoon.</p>
+  </div>
+
+  <div class="card exec">
+    <div class="card-head">
+      <span class="type-name">HMODULE</span>
+      <div class="tags"><span class="pill r">read</span><span class="pill x">execute</span></div>
+    </div>
+    <p class="gloss">"I am a <code>HANDLE</code>, but I also happen to be <em>literally the base address</em> of a DLL in your process."</p>
+<pre><span class="t">HMODULE</span> hNtdll = <span class="fn">GetModuleHandleW</span>(L<span class="s">"ntdll.dll"</span>);
+
+<span class="c">// hNtdll *is* the base of ntdll.dll. You can cast it and walk the PE headers.</span>
+<span class="t">PIMAGE_DOS_HEADER</span> pDos = (<span class="t">PIMAGE_DOS_HEADER</span>)hNtdll;
+<span class="t">PIMAGE_NT_HEADERS</span> pNt = (<span class="t">PIMAGE_NT_HEADERS</span>)((<span class="t">ULONG_PTR</span>)hNtdll + pDos-&gt;e_lfanew);</pre>
+    <p>This is the seam that every "resolve APIs by hash" technique exploits. The PEB lets you walk the list of loaded modules without calling any Windows API at all &mdash; you get the <code>HMODULE</code> (i.e. base address) of <code>ntdll.dll</code>, then you parse its export table in memory and find <code>NtAllocateVirtualMemory</code> by hashing its name. No <code>GetProcAddress</code>. No import table entry for sensitive functions. That whole family of tradecraft starts with understanding that <code>HMODULE == base address</code>.</p>
+  </div>
+
+  <div class="twin">
+    <div class="take red">
+      <h5>&rarr; operator's view</h5>
+      <p>API hashing (ROR13, FNV-1a, DJB2) only works because <code>HMODULE</code> is a real pointer you can parse. The trade-off is that your stub now has to walk PE headers at runtime, which creates its own thumbprint &mdash; a loop reading from <code>ntdll</code>'s export directory looks different from a normal import resolution.</p>
+    </div>
+    <div class="take blue">
+      <h5>&rarr; defender's view</h5>
+      <p>Processes that call <code>NtAllocateVirtualMemory</code> but have <strong>no IAT entry</strong> for it &mdash; and no matching <code>LoadLibrary</code> / <code>GetProcAddress</code> in their call history &mdash; are the signature. ETW's <code>Microsoft-Windows-Threat-Intelligence</code> provider (kernel-side, Protected-Process-only consumers) surfaces this cleanly.</p>
+    </div>
+  </div>
+
+  <div class="card write">
+    <div class="card-head">
+      <span class="type-name">PHANDLE</span>
+      <div class="tags"><span class="pill w">write</span></div>
+    </div>
+    <p class="gloss">"I am <code>HANDLE*</code>. I exist so a function can hand you a handle through an out-parameter."</p>
+<pre><span class="t">HANDLE</span>    hProc = NULL;
+<span class="t">OBJECT_ATTRIBUTES</span> oa  = { ... };
+<span class="t">CLIENT_ID</span>        cid = { .UniqueProcess = (<span class="t">HANDLE</span>)<span class="n">1234</span> };
+
+<span class="t">NTSTATUS</span> st = <span class="fn">NtOpenProcess</span>(<span class="m">&amp;hProc</span>,  <span class="c">// &lt;-- PHANDLE: kernel writes here</span>
+                            PROCESS_QUERY_INFORMATION,
+                            &amp;oa, &amp;cid);</pre>
+    <p>Every time you see <code>PHANDLE</code>, you are passing the address of your local variable so the kernel can deposit a new handle there. <strong>Write-axis, no question.</strong> Don't initialize the variable &mdash; it doesn't matter, the callee overwrites it.</p>
+  </div>
+
+  <hr class="rule">
+
+  <!-- ========== SECTION 4: STRINGS ========== -->
+  <h2><span class="num">§ 04</span> Strings: a split down the middle of the API</h2>
+  <p class="sub">ANSI and Unicode are not two encodings. They are two parallel universes, and one of them is a lie.</p>
+
+  <p>Every string-accepting Windows API has two versions. <code>CreateFileA</code> and <code>CreateFileW</code>. <code>MessageBoxA</code> and <code>MessageBoxW</code>. <code>RegOpenKeyExA</code> and <code>RegOpenKeyExW</code>. The suffix decides which string type you are handing in.</p>
+
+  <div class="card read">
+    <div class="card-head">
+      <span class="type-name">LPCSTR  /  LPSTR</span>
+      <div class="tags"><span class="pill r">read</span></div>
+    </div>
+    <p class="gloss">ANSI. 8-bit <code>char</code>. The legacy path. Internally converted to Unicode anyway.</p>
+<pre><span class="t">LPCSTR</span> path = <span class="s">"C:\\Users\\Public\\x.txt"</span>;  <span class="c">// 22 bytes incl. null</span>
+<span class="fn">CreateFileA</span>(path, ...);</pre>
+  </div>
+
+  <div class="card read">
+    <div class="card-head">
+      <span class="type-name">LPCWSTR  /  LPWSTR</span>
+      <div class="tags"><span class="pill r">read</span><span class="pill x">execute</span></div>
+    </div>
+    <p class="gloss">Unicode (UTF-16). 16-bit <code>wchar_t</code>. <strong>The native language of the Windows kernel.</strong></p>
+<pre><span class="t">LPCWSTR</span> path = L<span class="s">"C:\\Users\\Public\\x.txt"</span>; <span class="c">// 44 bytes incl. null</span>
+<span class="fn">CreateFileW</span>(path, ...);</pre>
+  </div>
+
+  <p>Now here is the thing that is genuinely important, and that nobody tells beginners: <strong><em class="pen">the "A" functions are a polite fiction.</em></strong> Inside every <code>CreateFileA</code> call, the function converts your ANSI string to UTF-16 using the current code page, then calls <code>CreateFileW</code>. Everything below <code>kernelbase.dll</code> is Unicode. The kernel does not speak ANSI. It never has.</p>
+
+  <div class="margin">
+    This is why the <code>UNICODE_STRING</code> structure &mdash; a length-prefixed UTF-16 buffer &mdash; shows up everywhere in the PEB, the TEB, the LDR, and the object manager. When you are writing direct syscalls, there is no "A" option. There is only <code>wchar_t</code>.
+  </div>
+
+  <h3>Byte counts: the off-by-one that ships in production</h3>
+<pre><span class="k">char</span>    a[] =  <span class="s">"maldev"</span>;  <span class="c">//  7 bytes  (6 chars + 1 null)</span>
+<span class="k">wchar_t</span> w[] = L<span class="s">"maldev"</span>;  <span class="c">// 14 bytes  (6 × 2 + 2-byte null)</span>
+
+<span class="c">// Always match the unit the API wants:</span>
+<span class="c">//    'cb' in a parameter name = count of BYTES</span>
+<span class="c">//    'cch' in a parameter name = count of CHARACTERS</span></pre>
+
+  <div class="twin">
+    <div class="take red">
+      <h5>&rarr; operator's view</h5>
+      <p>In-memory string scanners look for both encodings. A C2 domain stored as <code>char[]</code> also leaks in UTF-16 as a <code>wchar_t[]</code> if you touch any <code>W</code> API. <strong>Encode at rest. Decode late. Zero immediately.</strong> Keep the window of plaintext in memory as short as you can make it.</p>
+    </div>
+    <div class="take blue">
+      <h5>&rarr; defender's view</h5>
+      <p>Command-line telemetry (Sysmon 1, Security 4688 with command-line logging) arrives as UTF-16. File-path ETW (<code>Microsoft-Windows-Kernel-File</code>) arrives as UTF-16. Write your regexes and KQL against UTF-16 semantics, not ASCII. Watch for <code>\??\</code> and <code>\\?\</code> prefixes &mdash; they bypass <code>MAX_PATH</code> and some user-mode sanitizers.</p>
+    </div>
+  </div>
+
+  <hr class="rule">
+
+  <!-- ========== SECTION 5: IN/OUT ========== -->
+  <h2><span class="num">§ 05</span> <code>[in]</code> and <code>[out]</code>: annotations that tell you who owns what</h2>
+  <p class="sub">Not keywords. Not syntax. Just a very useful convention.</p>
+
+  <p>When you read MSDN, parameters come pre-annotated:</p>
+
+<pre><span class="t">HANDLE</span> <span class="fn">CreateFileW</span>(
+    [<span class="k">in</span>]           <span class="t">LPCWSTR</span>               lpFileName,
+    [<span class="k">in</span>]           <span class="t">DWORD</span>                 dwDesiredAccess,
+    [<span class="k">in</span>]           <span class="t">DWORD</span>                 dwShareMode,
+    [<span class="k">in</span>, <span class="k">optional</span>] <span class="t">LPSECURITY_ATTRIBUTES</span> lpSecurityAttributes,
+    [<span class="k">in</span>]           <span class="t">DWORD</span>                 dwCreationDisposition,
+    [<span class="k">in</span>]           <span class="t">DWORD</span>                 dwFlagsAndAttributes,
+    [<span class="k">in</span>, <span class="k">optional</span>] <span class="t">HANDLE</span>                hTemplateFile
+);</pre>
+
+  <p>The bracketed words are <strong>SAL</strong> (Source-code Annotation Language). They are purely documentation &mdash; stripping them does not change a single byte of compiled code. But they tell you at a glance which arguments are <span class="hl-r">inputs</span>, which are <span class="hl-w">outputs</span>, and which you may pass <code>NULL</code>. That is a lot of information for seven characters.</p>
+
+  <p>Read the signature above and you now know: <code>CreateFileW</code> takes seven inputs and writes back nothing through its parameters. The only way it communicates success is through its <code>HANDLE</code> return value. If you wanted data back via a pointer, you would see <code>[out]</code> somewhere, which you do not. <em>That is an entire paragraph of understanding from ten seconds of reading.</em></p>
+
+  <hr class="rule">
+
+  <!-- ========== SECTION 6: ERRORS ========== -->
+  <h2><span class="num">§ 06</span> Two error models, and why mixing them will ruin your day</h2>
+  <p class="sub">The Win32 layer and the native layer speak different languages about failure.</p>
+
+  <h3>Win32: sentinel + <code>GetLastError()</code></h3>
+  <p>Most user-mode Windows APIs do this dance:</p>
+<pre><span class="t">HANDLE</span> h = <span class="fn">CreateFileW</span>(...);
+<span class="k">if</span> (h == INVALID_HANDLE_VALUE) {
+    <span class="t">DWORD</span> err = <span class="fn">GetLastError</span>();   <span class="c">// &lt;-- MUST be called immediately</span>
+    <span class="k">switch</span> (err) {
+        <span class="k">case</span> <span class="n">2</span>:  <span class="c">/* ERROR_FILE_NOT_FOUND  */</span> <span class="k">break</span>;
+        <span class="k">case</span> <span class="n">5</span>:  <span class="c">/* ERROR_ACCESS_DENIED   */</span> <span class="k">break</span>;
+        <span class="k">case</span> <span class="n">87</span>: <span class="c">/* ERROR_INVALID_PARAMETER */</span> <span class="k">break</span>;
+    }
+}</pre>
+
+  <p>The function returns a <em>sentinel</em> (<code>NULL</code>, <code>FALSE</code>, <code>(DWORD)-1</code>, or <code>INVALID_HANDLE_VALUE</code>) and stashes the real error code in thread-local storage. You retrieve it with <code>GetLastError</code>, and the rule is: <strong>call it immediately</strong>. Any intervening API call can clobber it.</p>
+
+  <h3>Native: <code>NTSTATUS</code> returned directly</h3>
+  <p>Functions exported from <code>ntdll.dll</code> with <code>Nt</code> or <code>Zw</code> prefix don't play the <code>GetLastError</code> game. They return a 32-bit <code>NTSTATUS</code> directly, and zero means success.</p>
+
+<pre><span class="k">#define</span> <span class="m">STATUS_SUCCESS</span> ((<span class="t">NTSTATUS</span>)<span class="n">0x00000000L</span>)
+
+<span class="t">NTSTATUS</span> st = <span class="fn">NtOpenProcess</span>(&amp;hProc, PROCESS_QUERY_INFORMATION, &amp;oa, &amp;cid);
+<span class="k">if</span> (st != STATUS_SUCCESS) {
+    <span class="fn">printf</span>(<span class="s">"[!] NtOpenProcess: 0x%08X\n"</span>, st);
+}
+
+<span class="c">// Or better, use the macro that also treats "informational" statuses as OK:</span>
+<span class="k">#define</span> <span class="m">NT_SUCCESS</span>(Status) (((<span class="t">NTSTATUS</span>)(Status)) &gt;= 0)
+
+<span class="k">if</span> (!<span class="m">NT_SUCCESS</span>(st)) { ... }</pre>
+
+  <div class="callout">
+    <div class="label">why this matters for direct syscalls</div>
+    <p>When you bypass <code>kernel32</code> / <code>kernelbase</code> and invoke <code>Nt*</code> through your own syscall stubs &mdash; Hell's Gate, Halo's Gate, Tartarus Gate, SysWhispers, Freshy-Calls, whatever your flavor &mdash; <code>GetLastError</code> is <strong>meaningless</strong>. The Win32-to-NTSTATUS translation only happens inside the wrapper functions in <code>kernelbase.dll</code>. At the syscall boundary, all you have is whatever is sitting in <code>RAX</code> when <code>syscall</code> returns. Read the <code>NTSTATUS</code>. It is all you get.</p>
+  </div>
+
+  <hr class="rule">
+
+  <!-- ========== SECTION 7: RECAP ========== -->
+  <h2><span class="num">§ 07</span> Putting it together</h2>
+  <p class="sub">Read this table the way you would read chord shapes &mdash; memorize once, then you know the whole song.</p>
+
+  <table>
+    <thead>
+      <tr><th>Type</th><th>What it really is</th><th>Axis</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>DWORD</td><td>unsigned 32-bit int. Flags, PIDs, error codes, access masks.</td><td><span class="pill r">read</span></td></tr>
+      <tr><td>WORD / BYTE</td><td>16-bit and 8-bit unsigned. PE headers, shellcode bytes.</td><td><span class="pill r">read</span></td></tr>
+      <tr><td>SIZE_T</td><td>pointer-sized unsigned int. Sizes of memory objects.</td><td><span class="pill r">read</span></td></tr>
+      <tr><td>ULONG_PTR</td><td>pointer-sized unsigned int, for doing arithmetic on pointers.</td><td><span class="pill r">read</span> <span class="pill w">write</span></td></tr>
+      <tr><td>VOID / PVOID</td><td><code>void</code> and <code>void*</code>. Generic memory pointers.</td><td><span class="pill r">read</span> <span class="pill w">write</span></td></tr>
+      <tr><td>HANDLE</td><td>opaque index into your process's handle table. Kernel object reference.</td><td><span class="pill x">execute</span></td></tr>
+      <tr><td>HMODULE</td><td>a HANDLE that is also <em>literally</em> the base address of a loaded module.</td><td><span class="pill r">read</span> <span class="pill x">execute</span></td></tr>
+      <tr><td>PHANDLE, PDWORD, ...</td><td>pointer to the corresponding type. Usually an out-parameter.</td><td><span class="pill w">write</span></td></tr>
+      <tr><td>LPCSTR / LPSTR</td><td><code>const char*</code> / <code>char*</code>. ANSI. The "A" APIs.</td><td><span class="pill r">read</span></td></tr>
+      <tr><td>LPCWSTR / LPWSTR</td><td><code>const wchar_t*</code> / <code>wchar_t*</code>. UTF-16. The "W" APIs and the kernel itself.</td><td><span class="pill r">read</span> <span class="pill x">execute</span></td></tr>
+      <tr><td>NTSTATUS</td><td>32-bit status code returned by every <code>Nt*</code> / <code>Zw*</code> function.</td><td><span class="pill r">read</span></td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout">
+    <div class="label">three rules</div>
+    <p><strong>1.</strong> <code>P</code> means "pointer to". No exceptions worth caring about.</p>
+    <p><strong>2.</strong> <code>W</code> means Unicode, which is what the kernel actually speaks. Prefer it for anything you want to survive contact with direct syscalls.</p>
+    <p><strong>3.</strong> Two error models. <code>GetLastError</code> for Win32, <code>NTSTATUS</code> for native. Never mix them up; the conversion only exists inside the wrappers.</p>
+  </div>
+
+  <p style="margin-top: 48px;">None of this is hard. The obstacle is that it was all named thirty years ago, by different people, for a computer that no longer exists. Strip away the prefixes and you are looking at a handful of integers, a handful of pointers, and one genuinely interesting abstraction (the handle). That is the whole kit. From here, reading MSDN becomes reading English, disassembly becomes reading pseudocode, and EDR telemetry becomes an annotated audit trail of everything the machine did on your behalf.</p>
+
+  <!-- ========== END ========== -->
+  <footer class="end">
+    <div>filed under &middot; windows internals &middot; offensive tooling &middot; detection</div>
+    <div class="sig">&mdash; blacksunCUBE</div>
+  </footer>
+
+</div>
+
+<!-- toast for blocked actions (matches notebook-guard.js contract) -->
+<div id="nb-toast" class="nb-toast" role="status" aria-live="polite">copying disabled on this entry</div>
+
+<script src="{{ '/assets/js/notebook-guard.js' | relative_url }}"></script>
+</body>
+</html>
