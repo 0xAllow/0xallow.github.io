@@ -79,6 +79,7 @@
     <ul class="nav__menu">
       <li><a class="nav__link {% if page.url contains '/about' %}is-active{% endif %}" href="{{ '/about/' | relative_url }}">About Me</a></li>
       <li><a class="nav__link {% if page.url contains '/public' %}is-active{% endif %}" href="{{ '/public/' | relative_url }}">Public</a></li>
+      <li><a class="nav__link {% if page.url contains '/notebook' %}is-active{% endif %}" href="{{ '/notebook/' | relative_url }}">Notebook</a></li>
     </ul>
 
     <div class="nav__right">
@@ -102,6 +103,7 @@
     <ul>
       <li><a href="{{ '/about/' | relative_url }}">About Me</a></li>
       <li><a href="{{ '/public/' | relative_url }}">Public</a></li>
+      <li><a href="{{ '/notebook/' | relative_url }}">Notebook</a></li>
     </ul>
   </div>
 </nav>
