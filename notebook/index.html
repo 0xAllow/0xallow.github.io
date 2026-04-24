@@ -1,0 +1,71 @@
+---
+layout: default
+permalink: /notebook/
+title: Notebook
+description: Technical field notes on Windows internals and offensive/defensive research.
+---
+
+<section class="section">
+  <div class="container">
+
+    <header class="hero" style="padding-block: var(--sp-7) var(--sp-5);">
+      <span class="hero__eyebrow">Free learning</span>
+      <h1 class="hero__title">
+        Field Notebook
+        <em style="color: var(--text-muted); font-style: normal;">· learn for free</em>
+      </h1>
+      <p class="hero__lead">
+                Whatever got you into this field  a course, a CTF, a curious evening,  the growth tends to come from the same habits: reading, breaking things in a lab, writing it down, sharing.
+The work rewards two things: curiosity and stubbornness. You won't just run tools — you'll need to understand what's under them. Memory. Processes. Syscalls. The actual mechanics.
+It's slow. You'll get stuck often. First attempts rarely work. That's normal, not a signal to quit.
+At some point the shift happens: you stop reaching for tools and start reasoning about systems.
+
+      </p>
+      <p style="font-family: var(--font-mono); font-size: var(--fs-micro); color: var(--text-subtle); letter-spacing: 0.04em; margin-top: var(--sp-3);">
+        Read the internals. Break something. Write it up.
+      </p>
+    </header>
+
+    {% assign entries = site.notebook | sort: 'order' %}
+
+    {% if entries.size > 0 %}
+
+      {% comment %} Group by volume {% endcomment %}
+      {% assign volumes = entries | map: "volume" | uniq | sort %}
+
+      {% for vol in volumes %}
+        <section class="nb-volume">
+          <header class="nb-volume__head">
+            <span class="nb-volume__label">Volume {{ vol }}</span>
+            <span class="nb-volume__line" aria-hidden="true"></span>
+          </header>
+
+          <ul class="nb-grid">
+            {% assign vol_entries = entries | where: "volume", vol | sort: "entry" %}
+            {% for e in vol_entries %}
+              <li class="nb-card">
+                <a class="nb-card__link" href="{{ e.url | relative_url }}" target="_blank" rel="noopener">
+                  <span class="nb-card__meta">
+                    <span class="nb-card__vol">vol. {{ e.volume }}</span>
+                    <span class="nb-card__sep" aria-hidden="true">·</span>
+                    <span class="nb-card__entry">entry {{ e.entry }}</span>
+                  </span>
+                  <h3 class="nb-card__title">{{ e.title }}</h3>
+                  {% if e.description %}<p class="nb-card__desc">{{ e.description }}</p>{% endif %}
+                  <span class="nb-card__cta">
+                    Read entry
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17L17 7"/><path d="M8 7h9v9"/></svg>
+                  </span>
+                </a>
+              </li>
+            {% endfor %}
+          </ul>
+        </section>
+      {% endfor %}
+
+    {% else %}
+      <p style="color: var(--text-muted);">No entries yet. Volumes coming soon.</p>
+    {% endif %}
+
+  </div>
+</section>
