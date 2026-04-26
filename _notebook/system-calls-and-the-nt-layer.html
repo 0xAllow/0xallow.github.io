@@ -1,0 +1,1071 @@
+---
+layout: null
+title: "System Calls & the NT Layer"
+volume: "05"
+entry: "01"
+order: 501
+date: 2026-04-26
+description: "How user-mode code crosses into the kernel, why every EDR cares, and the four-year arms race that lives in those eight bytes."
+---
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>System Calls & the NT Layer — a field notebook</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #14161a;
+    --bg-soft: #1b1e24;
+    --bg-card: #1f232a;
+    --ink: #e8e4d8;
+    --ink-dim: #a8a396;
+    --ink-faint: #6d6a5f;
+    --rule: #2b2f38;
+
+    --read:  #5ec2e0;
+    --read-bg: rgba(94,194,224,0.10);
+    --read-border: rgba(94,194,224,0.38);
+
+    --write: #e8b64a;
+    --write-bg: rgba(232,182,74,0.10);
+    --write-border: rgba(232,182,74,0.42);
+
+    --exec:  #e8624a;
+    --exec-bg: rgba(232,98,74,0.10);
+    --exec-border: rgba(232,98,74,0.42);
+
+    --pen:   #d9456b;
+    --pen-bg: rgba(217,69,107,0.10);
+
+    --tele:  #a590d9;
+    --tele-bg: rgba(165,144,217,0.10);
+    --tele-border: rgba(165,144,217,0.40);
+
+    --mono: 'JetBrains Mono', ui-monospace, monospace;
+    --serif: 'Crimson Pro', 'Iowan Old Style', 'Palatino', serif;
+    --sans: 'Space Grotesk', system-ui, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--serif);
+    font-size: 18px;
+    line-height: 1.65;
+    background-image:
+      radial-gradient(circle at 20% 10%, rgba(94,194,224,0.04) 0%, transparent 40%),
+      radial-gradient(circle at 85% 80%, rgba(232,98,74,0.04) 0%, transparent 45%),
+      repeating-linear-gradient(0deg, transparent 0, transparent 2px, rgba(255,255,255,0.006) 2px, rgba(255,255,255,0.006) 3px);
+    min-height: 100vh;
+  }
+
+  body::before {
+    content: "";
+    position: fixed; inset: 0;
+    pointer-events: none;
+    opacity: 0.035;
+    z-index: 0;
+    background-image: url("data:image/svg+xml;utf8,<svg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  }
+
+  .wrap { max-width: 920px; margin: 0 auto; padding: 80px 32px 160px; position: relative; z-index: 1; }
+
+  .masthead {
+    border-top: 2px solid var(--ink);
+    border-bottom: 1px solid var(--rule);
+    padding: 22px 0 18px;
+    margin-bottom: 72px;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+  .masthead .brand {
+    font-family: var(--sans);
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    font-size: 12px;
+    color: var(--ink-dim);
+  }
+  .masthead .brand span { color: var(--exec); }
+  .masthead .meta {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-faint);
+    letter-spacing: 0.05em;
+  }
+
+  h1 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: clamp(42px, 6vw, 64px);
+    line-height: 1.05;
+    letter-spacing: -0.015em;
+    margin: 0 0 14px;
+    color: var(--ink);
+  }
+  h1 em { font-style: italic; color: var(--ink-dim); font-weight: 400; }
+
+  .dek {
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 21px;
+    color: var(--ink-dim);
+    max-width: 640px;
+    margin: 0 0 24px;
+    line-height: 1.45;
+  }
+  .byline {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-faint);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 80px;
+    padding-bottom: 40px;
+    border-bottom: 1px dashed var(--rule);
+  }
+  .byline em { color: var(--pen); font-style: normal; }
+
+  h2 {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 26px;
+    letter-spacing: -0.01em;
+    margin: 80px 0 6px;
+    color: var(--ink);
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+  }
+  h2 .num {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--ink-faint);
+    letter-spacing: 0.1em;
+  }
+  h2 + .sub {
+    font-family: var(--serif);
+    font-style: italic;
+    color: var(--ink-dim);
+    margin: 0 0 32px;
+    font-size: 17px;
+  }
+
+  h3 {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 17px;
+    letter-spacing: 0.01em;
+    margin: 36px 0 10px;
+    color: var(--ink);
+  }
+
+  p { margin: 0 0 18px; }
+
+  code, .kw {
+    font-family: var(--mono);
+    font-size: 0.86em;
+    background: var(--bg-soft);
+    padding: 2px 6px;
+    border-radius: 3px;
+    color: var(--ink);
+    border: 1px solid var(--rule);
+  }
+
+  strong { color: var(--ink); font-weight: 600; }
+  em.pen { color: var(--pen); font-style: italic; font-weight: 500; }
+
+  .legend {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0;
+    margin: 0 0 56px;
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    overflow: hidden;
+    background: var(--bg-card);
+  }
+  .legend-item { padding: 22px 20px; border-right: 1px solid var(--rule); }
+  .legend-item:last-child { border-right: none; }
+  .legend-item .tag {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 2px;
+  }
+  .legend-item.r .tag { background: var(--read-bg); color: var(--read); border: 1px solid var(--read-border); }
+  .legend-item.w .tag { background: var(--write-bg); color: var(--write); border: 1px solid var(--write-border); }
+  .legend-item.x .tag { background: var(--exec-bg); color: var(--exec); border: 1px solid var(--exec-border); }
+  .legend-item h4 {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 15px;
+    margin: 0 0 6px;
+    color: var(--ink);
+  }
+  .legend-item p {
+    font-family: var(--serif);
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--ink-dim);
+    margin: 0;
+  }
+  @media (max-width: 680px) {
+    .legend { grid-template-columns: 1fr; }
+    .legend-item { border-right: none; border-bottom: 1px solid var(--rule); }
+    .legend-item:last-child { border-bottom: none; }
+  }
+
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--rule);
+    border-radius: 3px;
+    padding: 24px 26px;
+    margin: 24px 0;
+  }
+  .card.read  { border-left-color: var(--read); }
+  .card.write { border-left-color: var(--write); }
+  .card.exec  { border-left-color: var(--exec); }
+
+  .card-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+  .card-head .type-name {
+    font-family: var(--mono);
+    font-weight: 700;
+    font-size: 17px;
+    color: var(--ink);
+  }
+  .tags { display: flex; gap: 6px; margin-left: auto; }
+  .pill {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    padding: 3px 8px;
+    border-radius: 2px;
+    text-transform: uppercase;
+  }
+  .pill.r { background: var(--read-bg); color: var(--read); border: 1px solid var(--read-border); }
+  .pill.w { background: var(--write-bg); color: var(--write); border: 1px solid var(--write-border); }
+  .pill.x { background: var(--exec-bg); color: var(--exec); border: 1px solid var(--exec-border); }
+
+  .gloss {
+    font-family: var(--serif);
+    font-style: italic;
+    color: var(--ink-dim);
+    font-size: 15px;
+    margin: 0 0 12px;
+  }
+
+  pre {
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.6;
+    background: #0f1116;
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    padding: 16px 18px;
+    overflow-x: auto;
+    margin: 14px 0;
+    color: #cdd1d8;
+  }
+  pre .c  { color: var(--ink-faint); font-style: italic; }
+  pre .k  { color: #b98dd0; }
+  pre .t  { color: #7dc9a9; }
+  pre .s  { color: #d8b36b; }
+  pre .n  { color: #e89069; }
+  pre .fn { color: #6db6d6; }
+  pre .m  { color: var(--pen); }
+  pre .fld { color: var(--write); }
+  pre .off { color: var(--tele); }
+
+  .hl-r { background: var(--read-bg); color: var(--read); padding: 1px 4px; border-radius: 2px; }
+  .hl-w { background: var(--write-bg); color: var(--write); padding: 1px 4px; border-radius: 2px; }
+  .hl-x { background: var(--exec-bg); color: var(--exec); padding: 1px 4px; border-radius: 2px; }
+
+  .margin {
+    border-left: 2px solid var(--pen);
+    background: var(--pen-bg);
+    padding: 14px 16px 14px 18px;
+    margin: 20px 0;
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 15px;
+    color: var(--ink);
+    line-height: 1.55;
+    position: relative;
+  }
+  .margin::before {
+    content: "margin note";
+    position: absolute;
+    top: -9px;
+    left: 14px;
+    background: var(--bg);
+    padding: 0 8px;
+    font-family: var(--mono);
+    font-size: 10px;
+    font-style: normal;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--pen);
+  }
+
+  .telemetry {
+    border: 1px solid var(--tele-border);
+    background: var(--tele-bg);
+    padding: 14px 16px 14px 18px;
+    margin: 20px 0;
+    border-radius: 3px;
+    position: relative;
+    font-family: var(--serif);
+    font-size: 14.5px;
+    line-height: 1.55;
+    color: var(--ink);
+  }
+  .telemetry::before {
+    content: "telemetry handoff";
+    position: absolute;
+    top: -9px;
+    left: 14px;
+    background: var(--bg);
+    padding: 0 8px;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--tele);
+  }
+  .telemetry strong { color: var(--tele); font-weight: 600; }
+  .telemetry code { font-size: 0.85em; }
+
+  .twin {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin: 20px 0;
+  }
+  @media (max-width: 680px) { .twin { grid-template-columns: 1fr; } }
+  .take {
+    background: var(--bg-soft);
+    border: 1px solid var(--rule);
+    padding: 16px 18px;
+    border-radius: 3px;
+  }
+  .take h5 {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    margin: 0 0 10px;
+  }
+  .take.red h5  { color: var(--exec); }
+  .take.blue h5 { color: var(--read); }
+  .take p { font-size: 14px; line-height: 1.55; margin: 0; color: var(--ink-dim); }
+  .take p strong { color: var(--ink); }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 24px 0;
+    font-size: 14px;
+  }
+  th, td {
+    text-align: left;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+  }
+  th {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+    border-bottom: 2px solid var(--ink);
+  }
+  td { font-family: var(--serif); color: var(--ink); }
+  td:first-child {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--ink);
+    width: 32%;
+  }
+
+  /* transition diagram (user → kernel border crossing) */
+  .crossing {
+    margin: 36px 0;
+    padding: 28px;
+    background: #0f1116;
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+  }
+  .crossing .caption {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-bottom: 18px;
+    display: flex;
+    justify-content: space-between;
+  }
+  .crossing .caption .left { color: var(--read); }
+  .crossing .caption .right { color: var(--exec); }
+  .lane {
+    border: 1px solid var(--rule);
+    background: var(--bg-card);
+    padding: 12px 14px;
+    margin-bottom: 4px;
+    font-family: var(--mono);
+    font-size: 13px;
+    display: grid;
+    grid-template-columns: 36px 1fr 1fr;
+    gap: 12px;
+    align-items: center;
+  }
+  .lane .n { color: var(--ink-faint); font-size: 11px; }
+  .lane .what { color: var(--ink); }
+  .lane .where {
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 13.5px;
+    color: var(--ink-dim);
+  }
+  .lane.user { border-left: 3px solid var(--read); }
+  .lane.bridge {
+    border-left: 3px solid var(--pen);
+    background: rgba(217,69,107,0.05);
+  }
+  .lane.kernel { border-left: 3px solid var(--exec); background: rgba(232,98,74,0.05); }
+  @media (max-width: 680px) {
+    .lane { grid-template-columns: 28px 1fr; }
+    .lane .where { display: none; }
+  }
+
+  /* gate evolution timeline */
+  .timeline {
+    margin: 28px 0;
+    padding: 24px;
+    background: #0f1116;
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+  }
+  .timeline .caption {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-bottom: 18px;
+  }
+  .epoch {
+    border: 1px solid var(--rule);
+    background: var(--bg-card);
+    padding: 14px 16px;
+    margin-bottom: 6px;
+    border-left: 3px solid var(--ink-faint);
+  }
+  .epoch .name {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--ink);
+    margin-bottom: 4px;
+  }
+  .epoch .name .yr {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--tele);
+    margin-left: 8px;
+    font-weight: 400;
+    letter-spacing: 0.05em;
+  }
+  .epoch .desc {
+    font-family: var(--serif);
+    font-size: 14px;
+    color: var(--ink-dim);
+    line-height: 1.55;
+  }
+  .epoch.hells   { border-left-color: var(--read); }
+  .epoch.halos   { border-left-color: var(--write); }
+  .epoch.tartarus { border-left-color: var(--exec); }
+  .epoch.indirect { border-left-color: var(--pen); }
+  .epoch.spoof   { border-left-color: var(--tele); }
+
+  .rule {
+    border: none;
+    border-top: 1px dashed var(--rule);
+    margin: 64px 0;
+    position: relative;
+    text-align: center;
+  }
+  .rule::after {
+    content: "§";
+    position: absolute;
+    top: -14px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg);
+    padding: 0 14px;
+    color: var(--ink-faint);
+    font-family: var(--serif);
+    font-size: 20px;
+  }
+
+  .callout {
+    background: linear-gradient(180deg, var(--bg-card) 0%, var(--bg-soft) 100%);
+    border: 1px solid var(--rule);
+    border-top: 3px solid var(--pen);
+    padding: 22px 24px;
+    margin: 32px 0;
+    border-radius: 3px;
+  }
+  .callout .label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--pen);
+    margin-bottom: 8px;
+  }
+  .callout p:last-child { margin-bottom: 0; }
+
+  .deck { margin: 40px 0; }
+  .deck-title {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--pen);
+    margin-bottom: 4px;
+  }
+  .deck-sub {
+    font-family: var(--serif);
+    font-style: italic;
+    color: var(--ink-dim);
+    margin: 0 0 24px;
+    font-size: 16px;
+  }
+  .card-flip {
+    background: var(--bg-card);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    margin: 12px 0;
+    cursor: pointer;
+    transition: border-color 0.15s;
+    overflow: hidden;
+  }
+  .card-flip:hover { border-color: var(--pen); }
+  .card-flip .q {
+    padding: 18px 22px;
+    font-family: var(--serif);
+    color: var(--ink);
+    font-size: 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+  }
+  .card-flip .q::after {
+    content: "flip";
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    flex-shrink: 0;
+  }
+  .card-flip .a {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.25s ease-out, padding 0.25s ease-out;
+    padding: 0 22px;
+    font-family: var(--serif);
+    color: var(--ink-dim);
+    font-size: 15px;
+    line-height: 1.5;
+    background: var(--bg-soft);
+  }
+  .card-flip.open { border-color: var(--pen); }
+  .card-flip.open .a {
+    max-height: 600px;
+    padding: 16px 22px 18px;
+    border-top: 1px solid var(--rule);
+  }
+  .card-flip.open .q::after { content: "close"; color: var(--pen); }
+  .card-flip .a code { font-size: 0.85em; }
+
+  .end {
+    margin-top: 100px;
+    padding-top: 40px;
+    border-top: 2px solid var(--ink);
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-faint);
+    letter-spacing: 0.05em;
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .end .sig { color: var(--exec); font-weight: 700; letter-spacing: 0.15em; }
+
+  ::selection { background: var(--pen); color: var(--bg); }
+
+  /* ============== Mobile responsive patch ============== */
+  @media (max-width: 720px) {
+    body { font-size: 16px; line-height: 1.6; }
+    .wrap { padding: 48px 18px 100px; }
+    h1 { font-size: 32px !important; line-height: 1.1; }
+    .dek { font-size: 17px; }
+    h2 { font-size: 22px; flex-wrap: wrap; gap: 8px; }
+    h2 .num { font-size: 11px; }
+    h2 + .sub { font-size: 15px; }
+    h3 { font-size: 16px; }
+    .card { padding: 18px 16px; margin: 18px 0; }
+    .card-head { gap: 8px; }
+    .card-head .type-name { font-size: 16px; word-break: break-all; }
+    .tags { margin-left: 0; flex-wrap: wrap; }
+    pre {
+      font-size: 12px;
+      padding: 12px 14px;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .legend, .legend-item { padding: 16px 14px; }
+    .twin { gap: 10px; }
+    .take { padding: 14px 14px; }
+    table { font-size: 13px; }
+    th, td { padding: 8px 10px; }
+    td:first-child { width: auto; }
+    .crossing, .timeline { padding: 16px 14px; }
+    .lane, .epoch { font-size: 12px; padding: 10px 12px; gap: 8px; }
+    .end { flex-direction: column; align-items: flex-start; }
+    .masthead { padding: 16px 0 14px; margin-bottom: 48px; }
+    .masthead .brand { font-size: 11px; }
+    .byline { margin-bottom: 56px; padding-bottom: 28px; font-size: 11px; }
+  }
+
+  /* Tablet adjustments */
+  @media (min-width: 721px) and (max-width: 920px) {
+    .wrap { padding: 64px 24px 120px; }
+    h1 { font-size: clamp(36px, 6vw, 50px); }
+  }
+</style>
+</head>
+<body data-nb-protected>
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="brand">blacksun<span>CUBE</span> &nbsp;·&nbsp; field notebook</div>
+    <div class="meta">vol. 05 / entry: system calls &amp; the nt layer</div>
+  </header>
+
+  <h1>System Calls,<br><em>or: the eight bytes where the war is fought.</em></h1>
+  <p class="dek">A walk from <code>kernel32!CreateFileW</code> down to <code>syscall</code>, through the CPU's privilege boundary, and back &mdash; with a tour of every gate, every detection, and every detection bypass that lives in those four instructions.</p>
+  <div class="byline">blacksun<span style="color:var(--exec);">CUBE</span> field notebook &middot; vol. 05 &middot; <em>builds on vol. 03 (PEB) &amp; vol. 04 (loader)</em></div>
+
+  <p>If vol. 04 was about the road that brings DLLs into your address space, vol. 05 is about the <em>border crossing</em> at the end of that road. Every Windows program, sooner or later, needs to do something only the kernel can do &mdash; allocate memory, open a file, start a thread, talk to a driver. The instruction that performs that crossing is <code>syscall</code>. It executes in roughly four CPU cycles. And around it, an entire industry of attack and detection has grown up over the last eight years.</p>
+
+  <p>This volume is denser than the previous four. There's a reason: <em>this is where almost every modern EDR evasion technique either lives or dies</em>. Hell's Gate, Halo's Gate, Tartarus' Gate, FreshyCalls, SysWhispers, indirect syscalls, call-stack spoofing &mdash; you'll meet all of them, in the order they appeared, with the detection technique each one was built to defeat and the counter-detection it triggered.</p>
+
+  <p>Same axes you know:</p>
+
+  <div class="legend">
+    <div class="legend-item r">
+      <span class="tag">R &middot; Read</span>
+      <h4>The stub Bytes</h4>
+      <p>The four-instruction template every <code>Nt*</code> function in <code>ntdll</code> follows. Read it once, recognize it everywhere.</p>
+    </div>
+    <div class="legend-item w">
+      <span class="tag">W &middot; Write</span>
+      <h4>SSN extraction</h4>
+      <p>The number you have to write into <code>EAX</code> before <code>syscall</code>. Different on every Windows build. The thing every gate is trying to retrieve.</p>
+    </div>
+    <div class="legend-item x">
+      <span class="tag">X &middot; Execute</span>
+      <h4>The instruction itself</h4>
+      <p><code>syscall</code> &mdash; the privilege transition. The two bytes (<code>0x0F 0x05</code>) every kernel-side telemetry source pivots around.</p>
+    </div>
+  </div>
+
+  <hr class="rule">
+
+  <!-- ========== § 01 ========== -->
+  <h2><span class="num">§ 01</span> Why the NT layer exists</h2>
+  <p class="sub">A user/kernel split that ARM and x86 enforce in hardware, and a DLL that bridges them.</p>
+
+  <p>Modern CPUs have rings &mdash; privilege levels. On x86_64, the ones that matter are <strong>ring 3</strong> (user mode) and <strong>ring 0</strong> (kernel mode). Code in ring 3 can't touch hardware, can't write to physical memory, can't read another process's address space. Code in ring 0 can do all of those things. The CPU enforces this split <em>at every instruction</em>: the wrong opcode in ring 3 produces a fault, not a silent override.</p>
+
+  <p>That means your code, sitting comfortably in ring 3, has to <em>ask</em> the kernel to do anything privileged on its behalf. The asking happens via the <code>syscall</code> instruction. And the asking has to be structured: which operation? with what arguments? where does the result go? That structure is what the <strong>Nt layer</strong> in <code>ntdll.dll</code> provides.</p>
+
+  <p>Every <code>Nt*</code> function in <code>ntdll</code> is, fundamentally, a four-instruction template that:</p>
+
+  <ol style="font-family: var(--serif); color: var(--ink); padding-left: 24px;">
+    <li style="margin-bottom: 8px;">Saves <code>RCX</code> (the first argument register) into <code>R10</code>, because <code>syscall</code> clobbers <code>RCX</code>.</li>
+    <li style="margin-bottom: 8px;">Loads the <strong>System Service Number</strong> (SSN) into <code>EAX</code> &mdash; the integer that tells the kernel <em>which</em> operation you want.</li>
+    <li style="margin-bottom: 8px;">Issues the <code>syscall</code> instruction. Privilege transition happens here.</li>
+    <li>Returns to the caller.</li>
+  </ol>
+
+  <p>That's it. That's the whole pattern. You'll see it now:</p>
+
+<pre><span class="c">; ntdll!NtAllocateVirtualMemory  (Windows 10/11 x64, unhooked)</span>
+mov     r10, rcx              <span class="c">; preserve RCX (1st arg) before syscall trashes it</span>
+mov     eax, <span class="m">0x18</span>             <span class="c">; SSN — value varies by Windows build!</span>
+syscall                       <span class="c">; cross into ring 0; kernel dispatches based on EAX</span>
+ret                           <span class="c">; return to caller</span></pre>
+
+  <p>Two facts to anchor everything else in this volume:</p>
+
+  <ul style="font-family: var(--serif); color: var(--ink); padding-left: 24px;">
+    <li style="margin-bottom: 10px;"><strong>The SSN above (<code>0x18</code>) is not stable.</strong> It's representative for some Windows 10/11 builds; on other builds it's something else. Microsoft reorders its System Service Descriptor Table between releases. j00ru maintains <a style="color:var(--tele);">the canonical online table</a> tracking SSNs across every build &mdash; which is why hardcoded SSNs are a recipe for an exploit that works on your test VM and fails on a customer's box.</li>
+    <li><strong>The pattern itself is fixed.</strong> Every single <code>Nt*</code> function in <code>ntdll</code> begins with this exact 4-instruction sequence (in the unhooked case). That's what makes Hell's Gate work: you don't need symbols, you don't need imports &mdash; if you find the byte sequence, you can extract the SSN.</li>
+  </ul>
+
+  <hr class="rule">
+
+  <!-- ========== § 02 ========== -->
+  <h2><span class="num">§ 02</span> The full descent: from <code>CreateFileW</code> to <code>syscall</code></h2>
+  <p class="sub">Five frames, two DLLs, one transition.</p>
+
+  <p>When you call a Win32 API like <code>CreateFileW</code>, the call passes through several layers before it reaches the kernel. Each layer has a job:</p>
+
+  <div class="crossing">
+    <div class="caption">
+      <span class="left">&larr; user mode &middot; ring 3</span>
+      <span class="right">ring 0 &middot; kernel mode &rarr;</span>
+    </div>
+    <div class="lane user">
+      <div class="n">0</div>
+      <div class="what">your code: <span style="color:#6db6d6;">CreateFileW(...)</span></div>
+      <div class="where">your .text section</div>
+    </div>
+    <div class="lane user">
+      <div class="n">1</div>
+      <div class="what">kernel32!CreateFileW</div>
+      <div class="where">forwarder &rarr; kernelbase</div>
+    </div>
+    <div class="lane user">
+      <div class="n">2</div>
+      <div class="what">kernelbase!CreateFileW</div>
+      <div class="where">argument validation, A→W conversion</div>
+    </div>
+    <div class="lane user">
+      <div class="n">3</div>
+      <div class="what">ntdll!NtCreateFile</div>
+      <div class="where">syscall stub (4 instructions)</div>
+    </div>
+    <div class="lane bridge">
+      <div class="n">·</div>
+      <div class="what">syscall instruction — <span style="color:var(--pen);">privilege transition</span></div>
+      <div class="where">opcode 0F 05 — ring 3 → ring 0</div>
+    </div>
+    <div class="lane kernel">
+      <div class="n">4</div>
+      <div class="what">nt!KiSystemCall64</div>
+      <div class="where">kernel entry, dispatches via SSDT</div>
+    </div>
+    <div class="lane kernel">
+      <div class="n">5</div>
+      <div class="what">nt!NtCreateFile</div>
+      <div class="where">actual implementation in ntoskrnl.exe</div>
+    </div>
+  </div>
+
+  <p>The frame that matters operationally is <strong>frame 3</strong>. <code>ntdll!NtCreateFile</code> is the last user-mode function before the kernel. Everything above it can be hooked, replaced, unloaded; everything below it lives in kernel memory you cannot touch from a normal process. <em>That's why every EDR places its inline hooks at frame 3</em> &mdash; and why every direct-syscall technique aims to sidestep frame 3 entirely.</p>
+
+  <div class="margin">
+    The duplication you might notice &mdash; <code>kernel32!CreateFileW</code> calling <code>kernelbase!CreateFileW</code> &mdash; is a real artifact, introduced by Windows 7's MinWin refactor. Most Win32 functionality moved into <code>kernelbase.dll</code>, but <code>kernel32.dll</code> kept thin forwarders for ABI compatibility. Knowing this lets you read MSDN and call stacks correctly: when MS says "this is in kernel32," they almost always mean <em>the implementation lives in kernelbase</em>.
+  </div>
+
+  <hr class="rule">
+
+  <!-- ========== § 03 ========== -->
+  <h2><span class="num">§ 03</span> What <code>syscall</code> actually does</h2>
+  <p class="sub">A single instruction with a lot of CPU machinery behind it.</p>
+
+  <p>The <code>syscall</code> instruction is two bytes long: <code>0F 05</code>. Don't let that fool you &mdash; it triggers a sequence of CPU operations that's nothing like a normal function call.</p>
+
+  <div class="card exec">
+    <div class="card-head">
+      <span class="type-name">syscall (opcode 0F 05)</span>
+      <div class="tags"><span class="pill x">execute</span></div>
+    </div>
+    <p class="gloss">"Switch to ring 0, jump to whatever the kernel registered in MSR_LSTAR, and let it figure out what you want from <code>EAX</code>."</p>
+<pre><span class="c">; What syscall does, microarchitecturally:
+;
+;  1. RIP    -&gt; RCX                 ; save user-mode return address
+;  2. RFLAGS -&gt; R11                 ; save user-mode flags
+;  3. RIP    &lt;- IA32_LSTAR (MSR)    ; jump to kernel's syscall handler
+;  4. CS, SS &lt;- IA32_STAR (MSR)     ; switch to kernel-mode segments
+;  5. mode   &lt;- ring 0              ; privilege change happens here
+;
+; On Windows, IA32_LSTAR points at nt!KiSystemCall64.
+;
+; What's NOT pushed:
+;   - Stack pointer is not switched by the CPU. Windows has to do that
+;     in software via swapgs + GS:[KPCR.UserRsp].
+;   - General-purpose registers other than RCX/R11 are NOT saved by
+;     the CPU. The kernel saves what it needs.</span></pre>
+  </div>
+
+  <p>The two model-specific registers (MSRs) that matter:</p>
+
+  <table>
+    <tr><td>IA32_LSTAR (0xC0000082)</td><td>Holds the address of the kernel's syscall entry point. On Windows, this is <code>nt!KiSystemCall64</code>. Set once at boot by the kernel.</td></tr>
+    <tr><td>IA32_STAR (0xC0000081)</td><td>Holds the segment selectors used after the privilege switch (kernel CS/SS, plus user CS/SS to be restored on <code>sysret</code>).</td></tr>
+  </table>
+
+  <p>From <code>KiSystemCall64</code> onwards, the kernel does <code>swapgs</code> to point GS at the per-CPU KPCR, switches to the kernel stack, saves user-mode registers in a trap frame, then <strong>indexes the System Service Descriptor Table (SSDT) by <code>EAX</code></strong> to find the actual function pointer for the syscall you requested. That's how the SSN gets translated to "call <code>nt!NtCreateFile</code>".</p>
+
+  <div class="callout">
+    <div class="label">why the user/kernel split is a security boundary, not a design choice</div>
+    <p>Without the privilege check the CPU enforces on every instruction, an EDR running in user mode would have no way to defend itself: any process could just overwrite the EDR's code, hooks, or detection logic. The user/kernel split lets the EDR put its <em>core</em> in ring 0 (a kernel driver) and its <em>visibility hooks</em> in ring 3 (DLLs injected into every process). User-mode hooks are convenient and fast, but they live on the attacker's side of the privilege boundary &mdash; and that asymmetry is the entire reason the syscall arms race exists.</p>
+  </div>
+
+  <hr class="rule">
+
+  <!-- ========== § 04 ========== -->
+  <h2><span class="num">§ 04</span> System Service Numbers: small integers, big consequences</h2>
+  <p class="sub">A volatile lookup index that's been the foundation of every direct-syscall technique since 2019.</p>
+
+  <p>The SSN is just an integer. <code>NtAllocateVirtualMemory</code> on a particular Windows 10 build might be <code>0x18</code>; on a different build, it could be <code>0x19</code>, <code>0x36</code>, or something else entirely. Microsoft reorders the SSDT essentially every feature update.</p>
+
+  <p>That's a problem for offensive tooling, because <strong>you don't know what build your target is running</strong>. Three approaches have emerged:</p>
+
+  <h3>Approach 1 — Hardcode + table lookup</h3>
+  <p>Ship a giant per-build mapping (j00ru's online table is the canonical reference), detect the OS version at runtime, pick the right SSN. Workable but heavy: your binary carries a lot of "extra stuff" that has no other reason to be there, and that extra stuff is itself a detection signature. <em>SysWhispers</em> (the original 2019 release) did this.</p>
+
+  <h3>Approach 2 — Dynamic resolution from <code>ntdll</code> at runtime</h3>
+  <p>Walk the loaded <code>ntdll.dll</code>, find the <code>Nt*</code> function you want, read the four-byte little-endian integer at offset 4 of its stub. That's the SSN. No hardcoded values, no per-build tables, no version detection. <em>This is what Hell's Gate does</em>.</p>
+
+<pre><span class="c">// Hell's Gate SSN extraction, simplified</span>
+<span class="t">PVOID</span> stub = <span class="fn">GetProcAddress</span>(ntdll, <span class="s">"NtAllocateVirtualMemory"</span>);
+<span class="c">// Or, more discreetly: walk PEB.Ldr → ntdll → export table → hash the name</span>
+
+<span class="c">// The unhooked stub looks like this:
+//   4C 8B D1            mov   r10, rcx
+//   B8 18 00 00 00      mov   eax, 0x18         &lt;-- the SSN
+//   F6 04 25 ...        test  byte ptr [..]      ; (introduced in Win 10 2004+)
+//   75 03               jne   short
+//   0F 05               syscall
+//   C3                  ret</span>
+
+<span class="t">DWORD</span> ssn = *(<span class="t">DWORD</span>*)((<span class="t">BYTE</span>*)stub + <span class="n">4</span>);   <span class="c">// extract the 4-byte SSN</span></pre>
+
+  <h3>Approach 3 — Approach 2, but resilient to hooks</h3>
+  <p>Approach 2 fails the moment an EDR has overwritten the first few bytes of the stub with a <code>jmp</code> trampoline. <em>Halo's Gate</em> (Reenz0h, 2021) handles this by walking up or down to the next <code>Nt*</code> function in memory, checking <em>its</em> stub, and inferring the hooked function's SSN by adjacent-offset arithmetic. <em>Tartarus' Gate</em> (trickster0, 2021) extends Halo's Gate to handle EDRs whose hook bytes don't match Halo's pattern.</p>
+
+  <hr class="rule">
+
+  <!-- ========== § 05 ========== -->
+  <h2><span class="num">§ 05</span> The gates: a four-year arms race</h2>
+  <p class="sub">Each technique is a counter to the previous detection. Read in order.</p>
+
+  <div class="timeline">
+    <div class="caption">timeline of direct-syscall evasion (2019–2024)</div>
+
+    <div class="epoch">
+      <div class="name">SysWhispers <span class="yr">·  2019, Jackson_T</span></div>
+      <div class="desc">First widely-used generator. Hardcoded per-build SSN tables. Solved "EDR hooks <code>ntdll</code>" but introduced a heavy fingerprint &mdash; the embedded SSN tables themselves became a static-analysis IOC.</div>
+    </div>
+
+    <div class="epoch hells">
+      <div class="name">Hell's Gate <span class="yr">·  2020, am0nsec &amp; RtlMateusz</span></div>
+      <div class="desc">No hardcoded SSNs. Walk the PEB, find <code>ntdll</code>, parse exports, read the SSN from the live stub at runtime. Drastically smaller binaries. <em>Defeated by:</em> EDRs that hook <code>ntdll</code> &mdash; the stub Hell's Gate reads is overwritten with a jump.</div>
+    </div>
+
+    <div class="epoch halos">
+      <div class="name">Halo's Gate <span class="yr">·  2021, Reenz0h (Sektor7)</span></div>
+      <div class="desc">When the target stub is hooked (first byte is <code>0xE9</code>), walk to the next <code>Nt*</code> function in memory, read <em>its</em> SSN, and add or subtract 1 to compensate (SSNs of adjacent <code>Nt*</code> functions in <code>ntdll</code> are sequential). <em>Defeated by:</em> EDRs that hook with patterns Halo's Gate didn't recognize.</div>
+    </div>
+
+    <div class="epoch tartarus">
+      <div class="name">Tartarus' Gate <span class="yr">·  2021, trickster0</span></div>
+      <div class="desc">Extends Halo's pattern recognition to handle additional EDR hook formats (e.g. the <code>4C 8B D1 E9 ...</code> "preserve-then-jump" form some EDRs use). Same SSN-from-neighbor trick, more permissive byte detection.</div>
+    </div>
+
+    <div class="epoch indirect">
+      <div class="name">Indirect syscalls <span class="yr">·  2022, multiple researchers</span></div>
+      <div class="desc">Direct syscalls have a giveaway: the <code>syscall</code> instruction lives in <em>your</em> <code>.text</code> section, so the kernel's return-address check shows the syscall came from a non-<code>ntdll</code> region. Indirect syscalls fix this: set up arguments yourself, but <code>jmp</code> into <code>ntdll</code>'s <em>own</em> <code>syscall;ret</code> gadget. The kernel sees a return address inside <code>ntdll</code> &mdash; legitimate-looking. <em>Defeated by:</em> EDRs that walk the entire call stack, not just the immediate return address.</div>
+    </div>
+
+    <div class="epoch spoof">
+      <div class="name">Call-stack spoofing <span class="yr">·  2022–present, WithSecure et al.</span></div>
+      <div class="desc">When EDRs inspect the full call stack via ETW-TI or kernel callbacks, even indirect syscalls show an unusual chain. Stack-spoofing techniques (return-address overwrite, frame-pointer manipulation, fake stack frames) construct an entire plausible-looking call chain before performing the syscall. The state of the art in 2024–2026.</div>
+    </div>
+  </div>
+
+  <p>Read this list as one continuous conversation between offense and defense. <em>Each row exists because the previous row got detected.</em> If you understand why each step happened, you can read any 2026 EDR-evasion paper and immediately know which detection it's targeting.</p>
+
+  <hr class="rule">
+
+  <!-- ========== § 06 ========== -->
+  <h2><span class="num">§ 06</span> Direct vs. indirect syscalls: the IOC difference</h2>
+  <p class="sub">A few bytes of difference, an entire detection class apart.</p>
+
+  <p>Both techniques bypass user-mode hooks on <code>ntdll</code>. The difference is <strong>where the <code>syscall</code> instruction lives</strong> when it executes.</p>
+
+  <div class="twin">
+    <div class="take red">
+      <h5>direct syscall</h5>
+<pre style="font-size: 11.5px; background: #14161a;">mov r10, rcx
+mov eax, 0x18
+syscall            <span style="color:var(--exec);">; in YOUR .text</span>
+ret</pre>
+      <p style="margin-top: 8px; font-size: 13px;">The <code>syscall</code> opcode is in your shellcode/loader's executable region. The kernel sees a syscall whose return address (in <code>RCX</code>) points into <em>your</em> code, not into <code>ntdll</code>. <strong>Easy to detect</strong> with a return-address check on entry to <code>KiSystemCall64</code>.</p>
+    </div>
+    <div class="take blue">
+      <h5>indirect syscall</h5>
+<pre style="font-size: 11.5px; background: #14161a;">mov r10, rcx
+mov eax, 0x18
+jmp [ntdll_syscall_addr]
+<span style="color:var(--ink-faint);">; ntdll executes:</span>
+<span style="color:var(--read);">syscall            ; in ntdll!</span>
+ret</pre>
+      <p style="margin-top: 8px; font-size: 13px;">You jump to a <code>syscall;ret</code> gadget inside <code>ntdll</code>. The kernel sees a syscall whose return address points into <code>ntdll</code> &mdash; matches a legitimate API call. <strong>Bypasses the simple check</strong>, requires full call-stack analysis to detect.</p>
+    </div>
+  </div>
+
+  <div class="margin">
+    A useful way to remember it: direct = "I'll do the privilege transition <em>myself</em>"; indirect = "I'll set up the parameters but borrow <code>ntdll</code>'s legal-looking <code>syscall</code>." The indirect version costs an extra <code>jmp</code> and looks much less like an attack.
+  </div>
+
+  <hr class="rule">
+
+  <!-- ========== § 07 ========== -->
+  <h2><span class="num">§ 07</span> Detection: what an EDR sees, and where</h2>
+  <p class="sub">Five chokepoints, in increasing order of evasion difficulty.</p>
+
+  <h3>1. User-mode hook on <code>ntdll!Nt*</code> (frontline, easy to bypass)</h3>
+  <p>The first thing every EDR DLL does after injection is overwrite the prologue of selected <code>Nt*</code> functions with a <code>jmp</code> to the EDR's inspection routine. This is the line of defense that <em>every</em> direct-syscall technique exists to bypass. Detection power: high for unsophisticated malware, zero for anyone using even Hell's Gate from 2020.</p>
+
+  <h3>2. Return-address check inside <code>KiSystemCall64</code></h3>
+  <p>EDRs with a kernel driver can register an instrumentation callback (<code>NtSetInformationProcess</code> with <code>ProcessInstrumentationCallback</code>) that fires after every syscall. The callback inspects the return address: <em>does it point into a known-good module like <code>ntdll</code> or <code>win32u</code>?</em> If not, you have a direct syscall. <strong>Defeated by indirect syscalls.</strong></p>
+
+  <h3>3. ETW Threat-Intelligence (ETW-TI)</h3>
+  <p><code>Microsoft-Windows-Threat-Intelligence</code> is a kernel-side ETW provider that fires on a curated list of security-relevant operations &mdash; <code>NtAllocateVirtualMemory</code> in another process, <code>NtProtectVirtualMemory</code> changing a page to RX, <code>NtMapViewOfSection</code>, <code>NtCreateThreadEx</code>, etc. <strong>Crucial property:</strong> ETW-TI fires <em>inside the kernel</em>, regardless of whether the caller used direct, indirect, or any other user-mode technique. <em>The events are generated unconditionally; the access control is on who gets to read them.</em></p>
+
+  <div class="margin">
+    <strong>2026 update &mdash; the bypass that landed.</strong> The "ETW-TI is unreachable without PPL" assumption held for years, and almost every EDR vendor's threat model depends on it. Connor McGarr published in January 2026 a technique that consumes the Threat-Intelligence provider <em>without</em> Antimalware-Light protection and <em>without</em> a kernel driver, by abusing the <code>SecurityTrace</code> flag on AutoLogger ETW sessions. Prelude released a working PoC tested on Windows 11 24H2 and 25H2 (<code>github.com/preludeorg/ThreatIntelligenceConsumer</code>). The implication for purple teamers: an attacker with admin can now read the same kernel telemetry the EDR reads &mdash; useful for understanding what's actually being detected. The implication for detection engineers: an EDR that assumes its ETW-TI consumer is the only one in the system can be observed, profiled, and outmaneuvered by a sufficiently motivated adversary. The events themselves still fire; the secrecy of who's listening doesn't.
+  </div>
+
+  <div class="margin">
+    ETW-TI is consumable only by processes running at <code>PsProtectedSignerAntimalware-Light</code> (one specific tier of PPL, not just any PPL), which requires an ELAM-signed driver Microsoft only co-signs for vetted security vendors. That's why Defender, CrowdStrike, SentinelOne, Elastic Defend, and other modern EDRs run their telemetry consumer at this protection level. From an attacker's perspective: if you can't BYOVD or get arbitrary kernel write, you historically couldn't blind ETW-TI from user mode. (See § 07's caveat below &mdash; that statement got narrower in 2026.) From a defender's perspective: an EDR that runs everything as a regular service, without Antimalware-Light protection, is leaving its eyes closed to the most reliable visibility on Windows.
+  </div>
+
+  <h3>4. Kernel call-stack capture (the current state of the art)</h3>
+  <p>Combined with ETW-TI, EDRs can capture a full kernel-side call stack at the moment a sensitive syscall fires. Elastic Defend introduced the kernel call-stack capability in 8.8 (May 2023), and expanded it with dedicated direct- and indirect-syscall rules in 8.11 (November 2023). The detection looks for: <em>did the syscall actually come from a frame in <code>ntdll</code>, or did it come from a region with no backing image (private RWX memory)?</em> Even indirect syscalls fail this if the rest of the stack is fake.</p>
+
+  <h3>5. Hardware breakpoints + VEH</h3>
+  <p>The most aggressive technique &mdash; defensive code sets DR0–DR3 hardware breakpoints on critical <code>Nt*</code> functions, registers a Vectored Exception Handler that fires on the breakpoint, and inspects <code>RSP</code> to verify the call originated from <code>ntdll</code>. Because there are only 4 hardware breakpoints, only the most security-relevant functions get this treatment (<code>NtProtectVirtualMemory</code>, <code>NtWriteVirtualMemory</code>, <code>NtCreateThreadEx</code>, <code>NtCreateUserProcess</code> are typical). See <em>Best EDR Of The Market V2</em> by xacone for a working implementation.</p>
+
+  <div class="telemetry">
+    <strong>Hunt template:</strong> with ETW-TI + call stack collection enabled, hunt for <code>NtAllocateVirtualMemory</code> or <code>NtProtectVirtualMemory</code> events whose call stack contains <em>any frame</em> with <code>ImageFileName == NULL</code> &mdash; meaning the return address points into private memory, not a backed image. False positives: JIT compilers (.NET, V8, Java). Filter on legitimate JIT processes, alert on everything else. Elastic publishes a working rule set; SentinelOne and Defender for Endpoint have equivalents in their managed signatures.
+  </div>
+
+  <h3>What the four-year story actually means</h3>
+
+  <p>For a purple-team operator, the practical takeaway is this: <em>direct syscalls alone are detectable in 2026</em>. They still work against legacy AV and against EDRs that don't use ETW-TI &mdash; which is more environments than you'd expect &mdash; but in a mature shop running Defender for Endpoint, CrowdStrike Falcon, SentinelOne, or Elastic Defend, you will fire telemetry the moment your shellcode allocates memory. The arms race has moved on to call-stack spoofing, which is itself getting harder as kernel callstack collection becomes standard.</p>
+
+  <p>For a detection engineer: <em>build your detections around the kernel-side primitives, not the user-mode ones</em>. Hooks in <code>ntdll</code> are great for casual malware but bypassed by anything sophisticated. ETW-TI, kernel callbacks, and image-load callbacks are the foundation. Everything else is a force multiplier.</p>
+
+  <hr class="rule">
+
+  <!-- ========== § 08 ========== -->
+  <div class="deck">
+    <div class="deck-title">§ 08 &nbsp;·&nbsp; the 30-second recall</div>
+    <h2 style="margin-top: 6px;">Flashcards</h2>
+    <p class="deck-sub">Eight questions. If you can answer all of them without notes, you own the syscall layer.</p>
+
+    <div class="card-flip" onclick="this.classList.toggle('open')">
+      <div class="q">Why does Windows have an "NT layer" (the <code>Nt*</code> functions in <code>ntdll</code>) at all?</div>
+      <div class="a">Because the CPU enforces a privilege split between ring 3 (user) and ring 0 (kernel). Code in user mode cannot directly perform privileged operations like memory allocation, process creation, or file I/O. The Nt layer in <code>ntdll</code> provides standardized stubs that issue the <code>syscall</code> instruction, which transitions to ring 0. The kernel uses the SSN in <code>EAX</code> to dispatch to the right service.</div>
+    </div>
+
+    <div class="card-flip" onclick="this.classList.toggle('open')">
+      <div class="q">What are the four instructions in a typical unhooked <code>Nt*</code> stub on x64, and what does each do?</div>
+      <div class="a"><code>mov r10, rcx</code> (preserve 1st arg before <code>syscall</code> trashes <code>RCX</code>), <code>mov eax, &lt;SSN&gt;</code> (set the system service number), <code>syscall</code> (privilege transition to ring 0), <code>ret</code> (return after <code>sysret</code> brings us back). On Win 10 2004+ there's an extra <code>test byte ptr [...]</code> + <code>jne</code> that handles WOW64 transitions, but the core 4 are stable.</div>
+    </div>
+
+    <div class="card-flip" onclick="this.classList.toggle('open')">
+      <div class="q">Why is hardcoding SSN values in your tooling fragile, and what's the standard way to resolve them dynamically?</div>
+      <div class="a">SSNs are reordered between Windows builds &mdash; <code>NtAllocateVirtualMemory</code> on Windows 10 1903 is not the same number as on Windows 11 23H2. j00ru maintains the canonical online tracking table. Hell's Gate solves this by walking <code>PEB.Ldr</code> to find <code>ntdll</code>, parsing its export directory to locate the function, and reading the 4-byte SSN directly from the stub at offset +4. No version detection needed, no embedded table.</div>
+    </div>
+
+    <div class="card-flip" onclick="this.classList.toggle('open')">
+      <div class="q">What problem does Halo's Gate solve that Hell's Gate cannot?</div>
+      <div class="a">Hell's Gate fails when the target function in <code>ntdll</code> is hooked &mdash; the EDR has overwritten the first 5 bytes with a <code>jmp</code> trampoline, so reading offset +4 gives garbage. Halo's Gate detects the hook (first byte is <code>0xE9</code>), walks to the next <code>Nt*</code> function in memory, reads <em>its</em> unhooked SSN, and infers the hooked function's SSN by adjacent-offset arithmetic (since <code>Nt*</code> functions in <code>ntdll</code> have sequential SSNs). Tartarus' Gate extends Halo's pattern detection to additional hook formats.</div>
+    </div>
+
+    <div class="card-flip" onclick="this.classList.toggle('open')">
+      <div class="q">What is the IOC difference between a direct and an indirect syscall, from the kernel's perspective?</div>
+      <div class="a">In a direct syscall, the <code>syscall</code> instruction lives in the attacker's <code>.text</code> section, so the saved return address (in <code>RCX</code>, which the kernel reads) points into private memory or non-<code>ntdll</code> code. In an indirect syscall, the attacker <code>jmp</code>s to a <code>syscall;ret</code> gadget inside <code>ntdll</code>, so the return address looks legitimate. A simple "is the return address inside <code>ntdll</code>?" check catches direct syscalls and misses indirect ones &mdash; which is why call-stack spoofing became necessary next.</div>
+    </div>
+
+    <div class="card-flip" onclick="this.classList.toggle('open')">
+      <div class="q">What is ETW-TI, and why is it the bedrock of modern syscall-based detection?</div>
+      <div class="a"><code>Microsoft-Windows-Threat-Intelligence</code>, a kernel-side ETW provider that emits events on a curated list of security-sensitive operations (<code>NtAllocateVirtualMemory</code> remote, <code>NtProtectVirtualMemory</code> to RX, <code>NtMapViewOfSection</code>, etc.). Critically, the events themselves fire inside the kernel <em>regardless of how the syscall was invoked</em> &mdash; direct, indirect, hardware-breakpoint, hooked, unhooked. The access control is on the consumer side: traditionally only <code>PsProtectedSignerAntimalware-Light</code> processes (ELAM-signed by Microsoft) could subscribe. As of January 2026, Connor McGarr's <code>SecurityTrace</code> AutoLogger technique allows admin-level processes to consume the same events without PPL. The events remain unbypassable; the read-side monopoly does not.</div>
+    </div>
+
+    <div class="card-flip" onclick="this.classList.toggle('open')">
+      <div class="q">An EDR captures a kernel call stack on every <code>NtAllocateVirtualMemory</code>. What does it look for to flag the call as suspicious?</div>
+      <div class="a">It walks each frame and asks: does the return address point into a backed image (a mapped DLL or EXE on disk), or into private memory? A frame whose return address is in private memory &mdash; particularly RWX private memory &mdash; means the call originated from shellcode, not from a legitimate module. Even an indirect syscall that bounces off <code>ntdll</code> will leave higher frames pointing into the attacker's loader. The detection requires call-stack spoofing to bypass, not just indirect-syscall mechanics.</div>
+    </div>
+
+    <div class="card-flip" onclick="this.classList.toggle('open')">
+      <div class="q">What does the model-specific register IA32_LSTAR hold, and why does that matter for offensive tooling?</div>
+      <div class="a">It holds the address of the kernel's syscall entry point &mdash; on Windows, <code>nt!KiSystemCall64</code>. The CPU jumps there on every <code>syscall</code> instruction. From offensive tooling's perspective, this matters because: (a) any kernel-side analysis of where syscalls "come from" is fundamentally a check on the saved RIP / RCX after the jump, not on LSTAR itself; (b) BYOVD attacks that achieve kernel write can in theory point LSTAR elsewhere, but doing so is heavy-handed and immediately visible to integrity checks; (c) understanding LSTAR helps you read kernel-side disassembly when reverse-engineering EDRs.</div>
+    </div>
+  </div>
+
+  <hr class="rule">
+
+  <!-- ========== § 09 ========== -->
+  <h2><span class="num">§ 09</span> Closing thought</h2>
+  <p>Five volumes in. Here's the picture so far:</p>
+  <ul style="font-family: var(--serif); color: var(--ink); padding-left: 24px;">
+    <li style="margin-bottom: 8px;"><strong>Vol. 01</strong> &mdash; the alphabet (data types).</li>
+    <li style="margin-bottom: 8px;"><strong>Vol. 02</strong> &mdash; the static skeleton (PE format).</li>
+    <li style="margin-bottom: 8px;"><strong>Vol. 03</strong> &mdash; the living state (PEB / TEB / LDR).</li>
+    <li style="margin-bottom: 8px;"><strong>Vol. 04</strong> &mdash; the machinery that builds that state (the loader).</li>
+    <li><strong>Vol. 05</strong> &mdash; the border crossing where everything leaves user mode (syscalls).</li>
+  </ul>
+  <p style="margin-top: 24px;">If you've internalized those five volumes, you can read any modern EDR-bypass paper and have a structural mental model of what's happening. Hell's Gate? Vol. 03 (PEB walk) + vol. 02 (PE parse) + vol. 05 (SSN extraction). Process hollowing? Vol. 02 (PE) + vol. 03 (image-base patch) + vol. 05 (the syscalls that perform the patch). Manual mapping? All four prior volumes, composed.</p>
+  <p>The same is true for detection. The frontier in 2026 is no longer "did this process load a suspicious DLL" or "is this binary unsigned" &mdash; those are baseline. The frontier is <em>did the kernel observe a syscall whose call stack doesn't reconstruct to a legitimate module path</em>. ETW-TI plus call-stack capture, surfaced through Defender for Endpoint or Elastic Defend, is the current state of the art. Bypassing it requires kernel access; defending against the bypass requires the same.</p>
+  <p>Next: <em class="pen">Vol. 06 &mdash; Hooking and Unhooking</em>. We pivot from "how attackers avoid hooks" to "how hooks are installed in the first place." Inline trampolines, IAT/EAT hooks, vectored exception handlers, the four ways an EDR's DLL gets injected, and the corresponding unhook strategies. The goal: by the end of vol. 06, you should be able to look at any process and tell, by reading <code>ntdll</code>'s first 16 bytes, whether an EDR has visited.</p>
+
+  <footer class="end">
+    <div>filed under &middot; windows internals &middot; syscalls &middot; offensive &amp; detection</div>
+    <div class="sig">&mdash; blacksunCUBE</div>
+  </footer>
+
+</div>
+<script src="/assets/js/notebook-guard.js" defer></script>
+</body>
+</html>
