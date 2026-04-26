@@ -1,0 +1,1127 @@
+---
+layout: null
+title: "The Windows Loader"
+volume: "04"
+entry: "01"
+order: 401
+date: 2026-04-25
+description: "How a DLL actually gets into your address space — from LoadLibrary to DllMain, and every detection opportunity along the way."
+---
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Windows Loader — a field notebook</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #14161a;
+    --bg-soft: #1b1e24;
+    --bg-card: #1f232a;
+    --ink: #e8e4d8;
+    --ink-dim: #a8a396;
+    --ink-faint: #6d6a5f;
+    --rule: #2b2f38;
+
+    --read:  #5ec2e0;
+    --read-bg: rgba(94,194,224,0.10);
+    --read-border: rgba(94,194,224,0.38);
+
+    --write: #e8b64a;
+    --write-bg: rgba(232,182,74,0.10);
+    --write-border: rgba(232,182,74,0.42);
+
+    --exec:  #e8624a;
+    --exec-bg: rgba(232,98,74,0.10);
+    --exec-border: rgba(232,98,74,0.42);
+
+    --pen:   #d9456b;
+    --pen-bg: rgba(217,69,107,0.10);
+
+    --tele:  #a590d9;
+    --tele-bg: rgba(165,144,217,0.10);
+    --tele-border: rgba(165,144,217,0.40);
+
+    --mono: 'JetBrains Mono', ui-monospace, monospace;
+    --serif: 'Crimson Pro', 'Iowan Old Style', 'Palatino', serif;
+    --sans: 'Space Grotesk', system-ui, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--serif);
+    font-size: 18px;
+    line-height: 1.65;
+    background-image:
+      radial-gradient(circle at 20% 10%, rgba(94,194,224,0.04) 0%, transparent 40%),
+      radial-gradient(circle at 85% 80%, rgba(232,98,74,0.04) 0%, transparent 45%),
+      repeating-linear-gradient(0deg, transparent 0, transparent 2px, rgba(255,255,255,0.006) 2px, rgba(255,255,255,0.006) 3px);
+    min-height: 100vh;
+  }
+
+  body::before {
+    content: "";
+    position: fixed; inset: 0;
+    pointer-events: none;
+    opacity: 0.035;
+    z-index: 0;
+    background-image: url("data:image/svg+xml;utf8,<svg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  }
+
+  .wrap { max-width: 920px; margin: 0 auto; padding: 80px 32px 160px; position: relative; z-index: 1; }
+
+  .masthead {
+    border-top: 2px solid var(--ink);
+    border-bottom: 1px solid var(--rule);
+    padding: 22px 0 18px;
+    margin-bottom: 72px;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+  .masthead .brand {
+    font-family: var(--sans);
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    font-size: 12px;
+    color: var(--ink-dim);
+  }
+  .masthead .brand span { color: var(--exec); }
+  .masthead .meta {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-faint);
+    letter-spacing: 0.05em;
+  }
+
+  h1 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: clamp(42px, 6vw, 64px);
+    line-height: 1.05;
+    letter-spacing: -0.015em;
+    margin: 0 0 14px;
+    color: var(--ink);
+  }
+  h1 em { font-style: italic; color: var(--ink-dim); font-weight: 400; }
+
+  .dek {
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 21px;
+    color: var(--ink-dim);
+    max-width: 640px;
+    margin: 0 0 24px;
+    line-height: 1.45;
+  }
+  .byline {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-faint);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 80px;
+    padding-bottom: 40px;
+    border-bottom: 1px dashed var(--rule);
+  }
+  .byline em { color: var(--pen); font-style: normal; }
+
+  h2 {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 26px;
+    letter-spacing: -0.01em;
+    margin: 80px 0 6px;
+    color: var(--ink);
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+  }
+  h2 .num {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--ink-faint);
+    letter-spacing: 0.1em;
+  }
+  h2 + .sub {
+    font-family: var(--serif);
+    font-style: italic;
+    color: var(--ink-dim);
+    margin: 0 0 32px;
+    font-size: 17px;
+  }
+
+  h3 {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 17px;
+    letter-spacing: 0.01em;
+    margin: 36px 0 10px;
+    color: var(--ink);
+  }
+
+  p { margin: 0 0 18px; }
+
+  code, .kw {
+    font-family: var(--mono);
+    font-size: 0.86em;
+    background: var(--bg-soft);
+    padding: 2px 6px;
+    border-radius: 3px;
+    color: var(--ink);
+    border: 1px solid var(--rule);
+  }
+
+  strong { color: var(--ink); font-weight: 600; }
+  em.pen { color: var(--pen); font-style: italic; font-weight: 500; }
+
+  .legend {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0;
+    margin: 0 0 56px;
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    overflow: hidden;
+    background: var(--bg-card);
+  }
+  .legend-item { padding: 22px 20px; border-right: 1px solid var(--rule); }
+  .legend-item:last-child { border-right: none; }
+  .legend-item .tag {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 2px;
+  }
+  .legend-item.r .tag { background: var(--read-bg); color: var(--read); border: 1px solid var(--read-border); }
+  .legend-item.w .tag { background: var(--write-bg); color: var(--write); border: 1px solid var(--write-border); }
+  .legend-item.x .tag { background: var(--exec-bg); color: var(--exec); border: 1px solid var(--exec-border); }
+  .legend-item h4 {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 15px;
+    margin: 0 0 6px;
+    color: var(--ink);
+  }
+  .legend-item p {
+    font-family: var(--serif);
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--ink-dim);
+    margin: 0;
+  }
+  @media (max-width: 680px) {
+    .legend { grid-template-columns: 1fr; }
+    .legend-item { border-right: none; border-bottom: 1px solid var(--rule); }
+    .legend-item:last-child { border-bottom: none; }
+  }
+
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--rule);
+    border-radius: 3px;
+    padding: 24px 26px;
+    margin: 24px 0;
+  }
+  .card.read  { border-left-color: var(--read); }
+  .card.write { border-left-color: var(--write); }
+  .card.exec  { border-left-color: var(--exec); }
+  .card-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+  .card-head .type-name {
+    font-family: var(--mono);
+    font-weight: 700;
+    font-size: 17px;
+    color: var(--ink);
+  }
+  .tags { display: flex; gap: 6px; margin-left: auto; }
+  .pill {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    padding: 3px 8px;
+    border-radius: 2px;
+    text-transform: uppercase;
+  }
+  .pill.r { background: var(--read-bg); color: var(--read); border: 1px solid var(--read-border); }
+  .pill.w { background: var(--write-bg); color: var(--write); border: 1px solid var(--write-border); }
+  .pill.x { background: var(--exec-bg); color: var(--exec); border: 1px solid var(--exec-border); }
+
+  .gloss {
+    font-family: var(--serif);
+    font-style: italic;
+    color: var(--ink-dim);
+    font-size: 15px;
+    margin: 0 0 12px;
+  }
+
+  pre {
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.6;
+    background: #0f1116;
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    padding: 16px 18px;
+    overflow-x: auto;
+    margin: 14px 0;
+    color: #cdd1d8;
+  }
+  pre .c  { color: var(--ink-faint); font-style: italic; }
+  pre .k  { color: #b98dd0; }
+  pre .t  { color: #7dc9a9; }
+  pre .s  { color: #d8b36b; }
+  pre .n  { color: #e89069; }
+  pre .fn { color: #6db6d6; }
+  pre .m  { color: var(--pen); }
+  pre .fld { color: var(--write); }
+  pre .off { color: var(--tele); }
+
+  .hl-r { background: var(--read-bg); color: var(--read); padding: 1px 4px; border-radius: 2px; }
+  .hl-w { background: var(--write-bg); color: var(--write); padding: 1px 4px; border-radius: 2px; }
+  .hl-x { background: var(--exec-bg); color: var(--exec); padding: 1px 4px; border-radius: 2px; }
+
+  .margin {
+    border-left: 2px solid var(--pen);
+    background: var(--pen-bg);
+    padding: 14px 16px 14px 18px;
+    margin: 20px 0;
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 15px;
+    color: var(--ink);
+    line-height: 1.55;
+    position: relative;
+  }
+  .margin::before {
+    content: "margin note";
+    position: absolute;
+    top: -9px;
+    left: 14px;
+    background: var(--bg);
+    padding: 0 8px;
+    font-family: var(--mono);
+    font-size: 10px;
+    font-style: normal;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--pen);
+  }
+
+  .telemetry {
+    border: 1px solid var(--tele-border);
+    background: var(--tele-bg);
+    padding: 14px 16px 14px 18px;
+    margin: 20px 0;
+    border-radius: 3px;
+    position: relative;
+    font-family: var(--serif);
+    font-size: 14.5px;
+    line-height: 1.55;
+    color: var(--ink);
+  }
+  .telemetry::before {
+    content: "telemetry handoff";
+    position: absolute;
+    top: -9px;
+    left: 14px;
+    background: var(--bg);
+    padding: 0 8px;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--tele);
+  }
+  .telemetry strong { color: var(--tele); font-weight: 600; }
+  .telemetry code { font-size: 0.85em; }
+
+  .twin {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin: 20px 0;
+  }
+  @media (max-width: 680px) { .twin { grid-template-columns: 1fr; } }
+  .take {
+    background: var(--bg-soft);
+    border: 1px solid var(--rule);
+    padding: 16px 18px;
+    border-radius: 3px;
+  }
+  .take h5 {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    margin: 0 0 10px;
+  }
+  .take.red h5  { color: var(--exec); }
+  .take.blue h5 { color: var(--read); }
+  .take p { font-size: 14px; line-height: 1.55; margin: 0; color: var(--ink-dim); }
+  .take p strong { color: var(--ink); }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 24px 0;
+    font-size: 14px;
+  }
+  th, td {
+    text-align: left;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+  }
+  th {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+    border-bottom: 2px solid var(--ink);
+  }
+  td { font-family: var(--serif); color: var(--ink); }
+  td:first-child {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--ink);
+    width: 32%;
+  }
+
+  /* call stack diagram — vertical flow */
+  .callstack {
+    margin: 28px 0;
+    padding: 24px;
+    background: #0f1116;
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+  }
+  .callstack .caption {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-bottom: 18px;
+  }
+  .frame {
+    font-family: var(--mono);
+    font-size: 13px;
+    padding: 11px 16px;
+    border: 1px solid var(--rule);
+    background: var(--bg-card);
+    margin-bottom: 4px;
+    display: grid;
+    grid-template-columns: 30px 1fr 1fr;
+    gap: 12px;
+    align-items: center;
+    position: relative;
+  }
+  .frame .depth {
+    color: var(--ink-faint);
+    font-size: 11px;
+  }
+  .frame .name { color: var(--ink); }
+  .frame .name .mod { color: var(--tele); }
+  .frame .name .fn { color: #6db6d6; }
+  .frame .role {
+    font-family: var(--serif);
+    font-style: italic;
+    color: var(--ink-dim);
+    font-size: 13.5px;
+  }
+  .frame.entry { border-left: 3px solid var(--read); }
+  .frame.work  { border-left: 3px solid var(--write); }
+  .frame.fire  { border-left: 3px solid var(--exec); background: rgba(232,98,74,0.05); }
+  @media (max-width: 680px) {
+    .frame { grid-template-columns: 24px 1fr; }
+    .frame .role { display: none; }
+  }
+
+  /* search-order ladder */
+  .ladder {
+    margin: 24px 0;
+    padding: 24px;
+    background: #0f1116;
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+  }
+  .ladder .caption {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-bottom: 18px;
+  }
+  .rung {
+    font-family: var(--mono);
+    font-size: 13px;
+    padding: 10px 16px;
+    border: 1px solid var(--rule);
+    background: var(--bg-card);
+    margin-bottom: 3px;
+    display: grid;
+    grid-template-columns: 36px 1fr 1fr;
+    gap: 12px;
+    align-items: center;
+  }
+  .rung .step {
+    color: var(--tele);
+    font-weight: 700;
+  }
+  .rung .what { color: var(--ink); }
+  .rung .why {
+    font-family: var(--serif);
+    font-style: italic;
+    color: var(--ink-faint);
+    font-size: 13px;
+  }
+  .rung.dangerous { border-left: 3px solid var(--exec); }
+  @media (max-width: 680px) {
+    .rung { grid-template-columns: 30px 1fr; }
+    .rung .why { display: none; }
+  }
+
+  .rule {
+    border: none;
+    border-top: 1px dashed var(--rule);
+    margin: 64px 0;
+    position: relative;
+    text-align: center;
+  }
+  .rule::after {
+    content: "§";
+    position: absolute;
+    top: -14px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg);
+    padding: 0 14px;
+    color: var(--ink-faint);
+    font-family: var(--serif);
+    font-size: 20px;
+  }
+
+  .callout {
+    background: linear-gradient(180deg, var(--bg-card) 0%, var(--bg-soft) 100%);
+    border: 1px solid var(--rule);
+    border-top: 3px solid var(--pen);
+    padding: 22px 24px;
+    margin: 32px 0;
+    border-radius: 3px;
+  }
+  .callout .label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--pen);
+    margin-bottom: 8px;
+  }
+  .callout p:last-child { margin-bottom: 0; }
+
+  .deck { margin: 40px 0; }
+  .deck-title {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--pen);
+    margin-bottom: 4px;
+  }
+  .deck-sub {
+    font-family: var(--serif);
+    font-style: italic;
+    color: var(--ink-dim);
+    margin: 0 0 24px;
+    font-size: 16px;
+  }
+  .card-flip {
+    background: var(--bg-card);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    margin: 12px 0;
+    cursor: pointer;
+    transition: border-color 0.15s;
+    overflow: hidden;
+  }
+  .card-flip:hover { border-color: var(--pen); }
+  .card-flip .q {
+    padding: 18px 22px;
+    font-family: var(--serif);
+    color: var(--ink);
+    font-size: 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+  }
+  .card-flip .q::after {
+    content: "flip";
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    flex-shrink: 0;
+  }
+  .card-flip .a {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.25s ease-out, padding 0.25s ease-out;
+    padding: 0 22px;
+    font-family: var(--serif);
+    color: var(--ink-dim);
+    font-size: 15px;
+    line-height: 1.5;
+    background: var(--bg-soft);
+  }
+  .card-flip.open { border-color: var(--pen); }
+  .card-flip.open .a {
+    max-height: 600px;
+    padding: 16px 22px 18px;
+    border-top: 1px solid var(--rule);
+  }
+  .card-flip.open .q::after { content: "close"; color: var(--pen); }
+  .card-flip .a code { font-size: 0.85em; }
+
+  .end {
+    margin-top: 100px;
+    padding-top: 40px;
+    border-top: 2px solid var(--ink);
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-faint);
+    letter-spacing: 0.05em;
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .end .sig { color: var(--exec); font-weight: 700; letter-spacing: 0.15em; }
+
+  ::selection { background: var(--pen); color: var(--bg); }
+
+  /* ============== Mobile responsive patch ============== */
+  @media (max-width: 720px) {
+    body { font-size: 16px; line-height: 1.6; }
+    .wrap { padding: 48px 18px 100px; }
+    h1 { font-size: 32px !important; line-height: 1.1; }
+    .dek { font-size: 17px; }
+    h2 { font-size: 22px; flex-wrap: wrap; gap: 8px; }
+    h2 .num { font-size: 11px; }
+    h2 + .sub { font-size: 15px; }
+    h3 { font-size: 16px; }
+    .card { padding: 18px 16px; margin: 18px 0; }
+    .card-head { gap: 8px; }
+    .card-head .type-name { font-size: 16px; word-break: break-all; }
+    .tags { margin-left: 0; flex-wrap: wrap; }
+    pre {
+      font-size: 12px;
+      padding: 12px 14px;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .legend, .legend-item { padding: 16px 14px; }
+    .twin { gap: 10px; }
+    .take { padding: 14px 14px; }
+    table { font-size: 13px; }
+    th, td { padding: 8px 10px; }
+    td:first-child { width: auto; }
+    .callstack, .ladder { padding: 16px 14px; }
+    .frame, .rung { font-size: 12px; padding: 9px 12px; gap: 8px; }
+    .end { flex-direction: column; align-items: flex-start; }
+    .masthead { padding: 16px 0 14px; margin-bottom: 48px; }
+    .masthead .brand { font-size: 11px; }
+    .byline { margin-bottom: 56px; padding-bottom: 28px; font-size: 11px; }
+  }
+
+  /* Tablet adjustments */
+  @media (min-width: 721px) and (max-width: 920px) {
+    .wrap { padding: 64px 24px 120px; }
+    h1 { font-size: clamp(36px, 6vw, 50px); }
+  }
+</style>
+</head>
+<body data-nb-protected>
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="brand">blacksun<span>CUBE</span> &nbsp;·&nbsp; field notebook</div>
+    <div class="meta">vol. 04 / entry: the windows loader</div>
+  </header>
+
+  <h1>The Windows Loader,<br><em>or: how a DLL actually shows up in your address space.</em></h1>
+  <p class="dek">A walk through the code path from <code>LoadLibrary</code> to <code>DllMain</code> &mdash; and the four families of attack and detection that exist nowhere else but inside that path.</p>
+  <div class="byline">blacksun<span style="color:var(--exec);">CUBE</span> field notebook &middot; vol. 04 &middot; <em>builds on vol. 02 (PE) &amp; vol. 03 (PEB/Ldr)</em></div>
+
+  <p>Vol. 03 ended with the loader's data structures: the <code>PEB.Ldr</code> list, each entry pointing to a loaded module's base. We treated those as static facts &mdash; <em>here is the list, here are the bases</em>. Now we ask the question that matters for offense and defense: <strong>how does an entry actually <em>get</em> into that list?</strong></p>
+
+  <p>The answer is a code path inside <code>ntdll.dll</code> that is almost entirely undocumented, has been reverse-engineered at length by the security industry, and is the single most monitored region of code in any process running an EDR. Three things live in this path that exist nowhere else:</p>
+
+  <ol style="font-family: var(--serif); color: var(--ink); padding-left: 24px;">
+    <li style="margin-bottom: 10px;"><strong>The first arbitrary code execution opportunity</strong> &mdash; <code>DllMain</code> runs before any other code in a freshly-loaded DLL.</li>
+    <li style="margin-bottom: 10px;"><strong>The DLL search order</strong> &mdash; the algorithm that decides <em>which</em> DLL on disk satisfies a name, which is the entire foundation of DLL hijacking.</li>
+    <li><strong>Loader lock</strong> &mdash; a process-wide critical section that enforces serialization on every load, and which is the source of more deadlocks and EDR detection signals than any other primitive in user mode.</li>
+  </ol>
+
+  <p>Same axes you know:</p>
+
+  <div class="legend">
+    <div class="legend-item r">
+      <span class="tag">R &middot; Read</span>
+      <h4>Loader inputs</h4>
+      <p>The DLL name, the search path, the module list. Things the loader reads to decide what to do next.</p>
+    </div>
+    <div class="legend-item w">
+      <span class="tag">W &middot; Write</span>
+      <h4>Loader work</h4>
+      <p>Mapping the file, applying relocations, patching the IAT, growing the LDR list. State the loader builds.</p>
+    </div>
+    <div class="legend-item x">
+      <span class="tag">X &middot; Execute</span>
+      <h4>Code that fires</h4>
+      <p>TLS callbacks, then <code>DllMain</code>. The moment when the DLL starts running its own code.</p>
+    </div>
+  </div>
+
+  <hr class="rule">
+
+  <!-- ========== § 01 ========== -->
+  <h2><span class="num">§ 01</span> Why a loader exists at all</h2>
+  <p class="sub">A naive picture of program startup, and what's missing from it.</p>
+
+  <p>Imagine you compile a small C program that calls <code>MessageBoxW</code>. The naive mental model is: the OS reads your <code>.exe</code>, copies it into memory, jumps to <code>main</code>, and you're running. That picture is wrong in one critical way: <code>MessageBoxW</code> doesn't live in your <code>.exe</code>. It lives in <code>user32.dll</code>. When your code says <code>call MessageBoxW</code>, the CPU needs an address to jump to &mdash; and that address depends on where <code>user32.dll</code> ended up in <em>your</em> process's virtual memory, which is decided at runtime by ASLR.</p>
+
+  <p>So before <code>main</code> can run, somebody has to: find <code>user32.dll</code> on disk, map it into memory, walk its export table to find <code>MessageBoxW</code>, write that address into your IAT (vol. 02), and only then jump to <code>main</code>. That somebody is the <strong>loader</strong>. It lives in <code>ntdll.dll</code>. It runs before any of your code. And it doesn't stop after <code>main</code> &mdash; every <code>LoadLibrary</code> call you make later goes through the same machinery.</p>
+
+  <div class="margin">
+    The loader is the closest thing the OS has to a runtime that runs <em>inside</em> your process. It's not a service, not a daemon &mdash; it's a chunk of code in <code>ntdll.dll</code> that the kernel hands the first execution to. Everything you call, including <code>main</code>, runs after the loader has already done its job. If you've ever wondered why a debugger that breaks on the EXE entry point already shows several DLLs loaded &mdash; this is why.
+  </div>
+
+  <hr class="rule">
+
+  <!-- ========== § 02 ========== -->
+  <h2><span class="num">§ 02</span> Process startup: <code>LdrInitializeThunk</code></h2>
+  <p class="sub">The kernel's handoff to user mode lands here, not at your entry point.</p>
+
+  <p>When the kernel finishes setting up a new process &mdash; allocating the address space, mapping the EXE, creating the initial thread &mdash; it does <em>not</em> jump to your <code>main</code>. It jumps to a function inside <code>ntdll.dll</code> called <code>LdrInitializeThunk</code>. That function is the entry point of every process on Windows.</p>
+
+  <p>What follows is the canonical process-startup call chain. This is the call stack you'll see if you set a debugger breakpoint on the very first instruction of any program:</p>
+
+  <div class="callstack">
+    <div class="caption">process startup &middot; canonical call stack (Windows 10/11 x64)</div>
+    <div class="frame entry">
+      <div class="depth">0</div>
+      <div class="name"><span class="mod">ntdll!</span><span class="fn">LdrInitializeThunk</span></div>
+      <div class="role">kernel hands off here</div>
+    </div>
+    <div class="frame entry">
+      <div class="depth">1</div>
+      <div class="name"><span class="mod">ntdll!</span><span class="fn">LdrpInitialize</span></div>
+      <div class="role">internal entry</div>
+    </div>
+    <div class="frame work">
+      <div class="depth">2</div>
+      <div class="name"><span class="mod">ntdll!</span><span class="fn">_LdrpInitialize</span></div>
+      <div class="role">first-thread bootstrap</div>
+    </div>
+    <div class="frame work">
+      <div class="depth">3</div>
+      <div class="name"><span class="mod">ntdll!</span><span class="fn">LdrpInitializeProcess</span></div>
+      <div class="role">parse manifest, build dep graph</div>
+    </div>
+    <div class="frame work">
+      <div class="depth">4</div>
+      <div class="name"><span class="mod">ntdll!</span><span class="fn">LdrpInitializeGraphRecurse</span></div>
+      <div class="role">walk every imported DLL</div>
+    </div>
+    <div class="frame work">
+      <div class="depth">5</div>
+      <div class="name"><span class="mod">ntdll!</span><span class="fn">LdrpInitializeNode</span></div>
+      <div class="role">prep one module for init</div>
+    </div>
+    <div class="frame fire">
+      <div class="depth">6</div>
+      <div class="name"><span class="mod">ntdll!</span><span class="fn">LdrpCallInitRoutine</span></div>
+      <div class="role">about to invoke external code</div>
+    </div>
+    <div class="frame fire">
+      <div class="depth">7</div>
+      <div class="name"><span class="mod">user32!</span><span class="fn">DllMain</span></div>
+      <div class="role">first foreign code runs</div>
+    </div>
+  </div>
+
+  <p>Notice the structure: all the frames in <span style="color:var(--read);"><code>ntdll</code></span> with names starting <code>Ldrp*</code> are internal loader work. The single frame that <em>leaves</em> ntdll &mdash; <code>LdrpCallInitRoutine</code> calling someone else's <code>DllMain</code> &mdash; is the moment when the loader briefly hands control to code it doesn't trust. That single transition is the most important boundary in the entire loader.</p>
+
+  <div class="telemetry">
+    <strong>Signal for defenders:</strong> <code>LdrpCallInitRoutine</code> is exactly where EDR kernel callbacks fire for image-load notifications. Specifically, <code>PsSetLoadImageNotifyRoutine</code> dispatches to registered drivers <em>before</em> <code>DllMain</code> runs &mdash; this is a callout from the kernel-side image-mapping machinery, not from <code>ntdll</code>. The driver receives the new image's base, size, full path, and process context, and can examine, log, or block. For purple team work, this callback chain is your visibility into every DLL load in every process on the system, including ones that bypass user-mode hooks.
+  </div>
+
+  <p>The same call chain runs for dynamic loads &mdash; the only difference is the entry point at the top:</p>
+
+  <div class="callstack">
+    <div class="caption">dynamic load &middot; <code style="color:var(--ink-faint);">LoadLibrary("foo.dll")</code></div>
+    <div class="frame entry">
+      <div class="depth">0</div>
+      <div class="name"><span class="mod">kernelbase!</span><span class="fn">LoadLibraryExW</span></div>
+      <div class="role">app's entry point</div>
+    </div>
+    <div class="frame work">
+      <div class="depth">1</div>
+      <div class="name"><span class="mod">ntdll!</span><span class="fn">LdrLoadDll</span></div>
+      <div class="role">documented NTAPI seam</div>
+    </div>
+    <div class="frame work">
+      <div class="depth">2</div>
+      <div class="name"><span class="mod">ntdll!</span><span class="fn">LdrpLoadDll</span></div>
+      <div class="role">acquire loader lock</div>
+    </div>
+    <div class="frame work">
+      <div class="depth">3</div>
+      <div class="name"><span class="mod">ntdll!</span><span class="fn">LdrpLoadDllInternal</span></div>
+      <div class="role">resolve, map, relocate</div>
+    </div>
+    <div class="frame work">
+      <div class="depth">4</div>
+      <div class="name"><span class="mod">ntdll!</span><span class="fn">LdrpPrepareModuleForExecution</span></div>
+      <div class="role">final pre-init prep</div>
+    </div>
+    <div class="frame work">
+      <div class="depth">5</div>
+      <div class="name"><span class="mod">ntdll!</span><span class="fn">LdrpInitializeGraphRecurse</span></div>
+      <div class="role">init dep graph (incl. children)</div>
+    </div>
+    <div class="frame fire">
+      <div class="depth">6</div>
+      <div class="name"><span class="mod">ntdll!</span><span class="fn">LdrpCallInitRoutine</span></div>
+      <div class="role">same firing point</div>
+    </div>
+    <div class="frame fire">
+      <div class="depth">7</div>
+      <div class="name"><span class="mod">foo!</span><span class="fn">DllMain</span></div>
+      <div class="role">attacker's code (if hijacked)</div>
+    </div>
+  </div>
+
+  <p>Both paths converge on <code>LdrpCallInitRoutine</code>. Whether the DLL is loaded statically (in the IAT, resolved during process init) or dynamically (via an explicit <code>LoadLibrary</code> at runtime), the moment of foreign-code execution is the same single function call. <em>This is why every EDR kernel-callback chain anchors at image load &mdash; one watchpoint covers both.</em></p>
+
+  <hr class="rule">
+
+  <!-- ========== § 03 ========== -->
+  <h2><span class="num">§ 03</span> What <code>LdrLoadDll</code> actually does</h2>
+  <p class="sub">The undocumented native API that <code>LoadLibrary</code> wraps.</p>
+
+  <div class="card write">
+    <div class="card-head">
+      <span class="type-name">NTSTATUS LdrLoadDll(...)</span>
+      <div class="tags"><span class="pill r">read</span><span class="pill w">write</span><span class="pill x">execute</span></div>
+    </div>
+    <p class="gloss">"Give me a DLL name. I'll find it, map it, relocate it, fix its imports, run its TLS callbacks, run its <code>DllMain</code>, add it to the LDR list, and give you back its base address."</p>
+<pre><span class="t">NTSTATUS</span> <span class="fn">LdrLoadDll</span>(
+    [<span class="k">in</span>, optional] <span class="t">PWSTR</span>           SearchPath,        <span class="c">// optional override of search path</span>
+    [<span class="k">in</span>, optional] <span class="t">PULONG</span>          DllCharacteristics,
+    [<span class="k">in</span>]           <span class="t">PUNICODE_STRING</span> ModuleFileName,    <span class="c">// the DLL name</span>
+    [<span class="k">out</span>]          <span class="t">PHANDLE</span>         ModuleHandle       <span class="c">// receives HMODULE = DllBase</span>
+);</pre>
+  </div>
+
+  <p>Three things to pull out of that signature, all relevant to detection:</p>
+
+  <ul style="font-family: var(--serif); color: var(--ink); padding-left: 24px;">
+    <li style="margin-bottom: 10px;"><strong>The name comes in as a <code>UNICODE_STRING</code>.</strong> Vol. 01 introduced this type; here you see why it matters. The Win32 wrappers (<code>LoadLibraryA</code>, <code>LoadLibraryW</code>) take a plain <code>LPCWSTR</code>, then call <code>RtlInitUnicodeString</code> internally to wrap it before invoking <code>LdrLoadDll</code>. The kernel and the loader speak <code>UNICODE_STRING</code> exclusively.</li>
+    <li style="margin-bottom: 10px;"><strong>It returns an <code>HMODULE</code> by out-pointer.</strong> Same as <code>LoadLibrary</code>'s return value. Same as the entry's <code>DllBase</code> in the LDR list. They are all the same value &mdash; the DLL's load address in your process &mdash; just typed differently.</li>
+    <li><strong>It takes an optional <code>SearchPath</code>.</strong> If <code>NULL</code>, the loader uses the standard search order (next section). If non-null, it overrides &mdash; which is useful for legitimate apps that want to control where their dependencies come from, and the same primitive is used by <code>LoadLibraryEx</code>'s <code>LOAD_LIBRARY_SEARCH_*</code> flags.</li>
+  </ul>
+
+  <p>Internally, after acquiring loader lock, <code>LdrLoadDll</code> does roughly this:</p>
+
+<pre><span class="c">// pseudocode of what LdrpLoadDll &amp; friends do, in order</span>
+
+<span class="n">1.</span>  <span class="fn">LdrpFastCheckIfLoaded</span>(name)              <span class="c">// already in LDR list? return existing entry</span>
+<span class="n">2.</span>  <span class="fn">LdrpResolveDllName</span>(name, search_path)    <span class="c">// run the search-order algorithm</span>
+<span class="n">3.</span>  <span class="fn">LdrpMapDllNtFileName</span>(full_path)            <span class="c">// NtCreateFile + NtCreateSection + NtMapViewOfSection</span>
+<span class="n">4.</span>  <span class="fn">LdrpProcessRelocationBlock</span>(...)            <span class="c">// apply .reloc fixups (vol. 02)</span>
+<span class="n">5.</span>  <span class="fn">LdrpSnapModule</span>(...)                        <span class="c">// patch IAT — resolve all imports</span>
+<span class="n">6.</span>  <span class="fn">LdrpInsertDataTableEntry</span>(...)              <span class="c">// add LDR_DATA_TABLE_ENTRY to all 3 lists</span>
+<span class="n">7.</span>  <span class="fn">LdrpProcessTLSData</span>(...)                    <span class="c">// fire TLS callbacks (vol. 02)</span>
+<span class="n">8.</span>  <span class="fn">LdrpCallInitRoutine</span>(DllMain, DLL_PROCESS_ATTACH)  <span class="c">// finally — DllMain</span>
+<span class="n">9.</span>  <span class="k">return</span> ModuleHandle = DllBase</pre>
+
+  <p>Steps 3, 4, 5 are pure mechanical work &mdash; map the file, fix up pointers. Step 6 is when the new DLL becomes <em>visible</em> to the rest of the process via the LDR list. Step 7 is the first foreign-code execution (TLS callbacks). Step 8 is the second (<code>DllMain</code>). Steps 7 and 8 both run <em>under loader lock</em>, which is why the lock matters so much &mdash; we'll come back to that.</p>
+
+  <hr class="rule">
+
+  <!-- ========== § 04 ========== -->
+  <h2><span class="num">§ 04</span> The DLL search order: where step 2 looks</h2>
+  <p class="sub">An algorithm with security implications hiding in every directory entry.</p>
+
+  <p>When you call <code>LoadLibrary("foo.dll")</code> &mdash; with just the bare name, no full path &mdash; the loader has to decide <em>which</em> <code>foo.dll</code> on disk you meant. Multiple copies of the same DLL routinely exist in different places. The algorithm that picks one is the <strong>DLL search order</strong>, and getting between the loader and the DLL it's looking for is the foundation of an entire attack class.</p>
+
+  <p>The search runs from top to bottom and stops at the first match. With <strong>SafeDllSearchMode enabled</strong> (the default since Windows XP SP2), the order is:</p>
+
+  <div class="ladder">
+    <div class="caption">DLL search order &middot; SafeDllSearchMode enabled (default)</div>
+    <div class="rung">
+      <div class="step">0a</div>
+      <div class="what">DLL redirection (<code>.local</code> file present)</div>
+      <div class="why">legacy redirection mechanism</div>
+    </div>
+    <div class="rung">
+      <div class="step">0b</div>
+      <div class="what">SxS manifest redirection</div>
+      <div class="why">side-by-side assembly resolution</div>
+    </div>
+    <div class="rung">
+      <div class="step">0c</div>
+      <div class="what">Already in LDR list (loaded-module list)</div>
+      <div class="why">if already loaded, return existing</div>
+    </div>
+    <div class="rung dangerous">
+      <div class="step">0d</div>
+      <div class="what">KnownDLLs section</div>
+      <div class="why">protected core DLLs &mdash; bypasses everything below</div>
+    </div>
+    <div class="rung">
+      <div class="step">1</div>
+      <div class="what">Application directory (where the EXE lives)</div>
+      <div class="why">first writable location adversary can target</div>
+    </div>
+    <div class="rung">
+      <div class="step">2</div>
+      <div class="what">System directory (<code>C:\Windows\System32</code>)</div>
+      <div class="why">where most legitimate DLLs really live</div>
+    </div>
+    <div class="rung">
+      <div class="step">3</div>
+      <div class="what">16-bit system directory (<code>C:\Windows\System</code>)</div>
+      <div class="why">historical, almost never matches</div>
+    </div>
+    <div class="rung">
+      <div class="step">4</div>
+      <div class="what">Windows directory (<code>C:\Windows</code>)</div>
+      <div class="why">rare but possible</div>
+    </div>
+    <div class="rung">
+      <div class="step">5</div>
+      <div class="what">Current directory of the process</div>
+      <div class="why">SafeDllSearchMode pushed this DOWN here</div>
+    </div>
+    <div class="rung">
+      <div class="step">6</div>
+      <div class="what">Directories in <code>PATH</code></div>
+      <div class="why">last resort &mdash; user-controlled, frequently abused</div>
+    </div>
+  </div>
+
+  <h3>Two registry values rule everything above</h3>
+
+  <p>Both of these decide what the loader does:</p>
+
+  <table>
+    <tr>
+      <td>HKLM\System\CCS\Control\<br>Session Manager\<br>SafeDllSearchMode</td>
+      <td>If <code>1</code> (default), CWD is at position 5 in the order &mdash; after the system directories. If <code>0</code>, CWD moves to position 2, and an attacker who controls the working directory of any LoadLibrary-calling process can trivially substitute system DLLs. <em>Defenders should ensure this stays <code>1</code></em> &mdash; modern Windows enforces it but legacy and CIS-compliant environments verify explicitly.</td>
+    </tr>
+    <tr>
+      <td>HKLM\System\CCS\Control\<br>Session Manager\<br>KnownDLLs</td>
+      <td>A list of DLL names. Any DLL in this list is loaded from a <em>preinitialized section object</em> the kernel set up at boot &mdash; not from disk at all. Bypasses the entire search order. <code>kernel32.dll</code>, <code>user32.dll</code>, <code>advapi32.dll</code>, <code>ntdll.dll</code>, and dozens more are KnownDLLs by default. <em>This is what makes most "DLL hijacking" of core system DLLs impossible.</em></td>
+    </tr>
+  </table>
+
+  <div class="margin">
+    KnownDLLs is the reason you can't just drop a malicious <code>kernel32.dll</code> next to <code>notepad.exe</code> and have it loaded. The kernel mapped the real <code>kernel32.dll</code> as a section at boot &mdash; every process gets that section mapped in, and the loader hits the "already loaded" check before it ever consults the search order. To attack a KnownDLL you need either kernel-level write to the registry list (admin + reboot) or to find a DLL <em>not</em> in the KnownDLLs list that a target process loads with the unsafe order &mdash; which brings us to the next section.
+  </div>
+
+  <hr class="rule">
+
+  <!-- ========== § 05 ========== -->
+  <h2><span class="num">§ 05</span> Loader lock: the most expensive critical section in user mode</h2>
+  <p class="sub">A single process-wide lock that serializes every load, every unload, every <code>DllMain</code>.</p>
+
+  <p>The loader lock is a critical section called <code>LdrpLoaderLock</code>, exposed via <code>PEB.LoaderLock</code>. It exists for a brutal reason: <em>the LDR list is shared by all threads</em>, and <code>DllMain</code> is allowed to call <code>LoadLibrary</code> recursively, and TLS callbacks fire concurrently with thread creation. Without one big lock around all of it, the LDR list would corrupt instantly.</p>
+
+  <p>Three rules of loader lock that every shellcode author and every EDR engineer learns the hard way:</p>
+
+  <ul style="font-family: var(--serif); color: var(--ink); padding-left: 24px;">
+    <li style="margin-bottom: 10px;"><strong>Held throughout <code>DllMain</code>.</strong> When your <code>DllMain</code> runs with <code>DLL_PROCESS_ATTACH</code> or <code>DLL_THREAD_ATTACH</code>, the loader lock is held by your thread. Microsoft's official documentation lists what you can and cannot do in <code>DllMain</code> precisely because of this lock. The forbidden list is long: don't call into <code>user32</code>, <code>shell32</code>, <code>ole32</code>; don't <code>WaitForSingleObject</code> on a non-loader-related event; don't create threads and wait for them.</li>
+    <li style="margin-bottom: 10px;"><strong>Re-entrant on the same thread.</strong> Calling <code>LoadLibrary</code> from inside <code>DllMain</code> is technically legal &mdash; the lock is recursive, so the same thread can re-acquire it. The new DLL gets loaded, its <code>DllMain</code> runs, and we recurse. NetSPI's "Adaptive DLL Hijacking" research builds on exactly this property.</li>
+    <li><strong>Cross-thread waits inside <code>DllMain</code> deadlock.</strong> If thread A is in <code>DllMain</code> (holding the lock) and waits on a thread B that itself tries to <code>LoadLibrary</code>, thread B blocks on the lock, A blocks on B, deadlock. This is the <em>classic</em> "DllMain best practices" failure mode &mdash; and a remarkable fraction of "process hangs at startup" bugs in production are exactly this.</li>
+  </ul>
+
+  <div class="callout">
+    <div class="label">why offensive code does the bare minimum in DllMain</div>
+    <p>An attacker who hijacks a DLL load gets <code>DllMain</code> execution &mdash; but under loader lock. The defensive guidance Microsoft publishes ("avoid these calls in DllMain") becomes <em>offensive</em> guidance: do as little as possible, don't load anything, don't wait on anything, and definitely don't try to reach the network. Spawn a thread (<code>CreateThread</code> is one of the few safe calls), have <em>that</em> thread do the real work, and return TRUE immediately. Every mature offensive framework knows this rule cold.</p>
+  </div>
+
+  <p>You can inspect loader lock in WinDbg:</p>
+
+<pre>0:000&gt; <span class="fn">!critsec</span> ntdll!LdrpLoaderLock
+CritSec ntdll!LdrpLoaderLock+0 at 00007ffe`f2ef55c8
+WaiterWoken        No
+LockCount          0
+RecursionCount     <span class="n">1</span>          <span class="c">; we're holding it on this thread</span>
+OwningThread       46e0
+EntryCount         0
+ContentionCount    0
+*** Locked
+
+0:000&gt; <span class="fn">dt</span> _PEB <span class="m">@$peb</span> -n LoaderLock
+ntdll!_PEB
+   <span class="off">+0x110</span> LoaderLock : 0x00007ffe`f2ef55c8 _RTL_CRITICAL_SECTION</pre>
+
+  <hr class="rule">
+
+  <!-- ========== § 06 ========== -->
+  <h2><span class="num">§ 06</span> Detection surface: what fires and where</h2>
+  <p class="sub">Four chokepoints that EDR vendors converge on.</p>
+
+  <p>From a detection-engineering standpoint, the loader code path is dense with telemetry opportunities. The four chokepoints that matter most:</p>
+
+  <div class="twin">
+    <div class="take blue">
+      <h5>1 &middot; image load kernel callback</h5>
+      <p><code>PsSetLoadImageNotifyRoutine</code> registered by EDR drivers fires for <em>every</em> image mapping in <em>every</em> process system-wide. Receives image base, size, full file path, process ID, and a flag indicating whether it's the main EXE or a DLL. <strong>This is the foundational EDR primitive</strong> &mdash; bypassing it requires kernel exploitation or the EDR's driver to be unloaded. Cannot be evaded from user mode.</p>
+    </div>
+    <div class="take blue">
+      <h5>2 &middot; Sysmon Event 7 / Event ID 4688</h5>
+      <p>Sysmon's image-load event captures every DLL load with hashes, signing status, and full path. Event ID 7 fires for every <code>LdrpCallInitRoutine</code>-driven load. High-volume but invaluable: a process that loads an unsigned DLL from a user-writable path during its first second of life is rarely benign. Pair with command-line + parent process for high-fidelity rules.</p>
+    </div>
+    <div class="take blue">
+      <h5>3 &middot; ETW Microsoft-Windows-<br>Kernel-Process</h5>
+      <p>Kernel-side ETW image-load events. Same data as Sysmon Event 7 but consumed by EDRs without a Sysmon dependency. Faster, no buffering, less likely to drop events under load. ETW-TI (<code>Microsoft-Windows-Threat-Intelligence</code>) also surfaces loads with extra context, but only PPL consumers can subscribe to it.</p>
+    </div>
+    <div class="take blue">
+      <h5>4 &middot; user-mode hooks on <code>LdrLoadDll</code></h5>
+      <p>Many EDRs install inline hooks on <code>LdrLoadDll</code> in <code>ntdll.dll</code> to inspect the request <em>before</em> the load happens, with the option to block it. User-mode hooks can be bypassed by direct syscalls (vol. 05 territory) but they remain the front-line defense against most commodity malware.</p>
+    </div>
+  </div>
+
+  <hr class="rule">
+
+  <!-- ========== § 07 ========== -->
+  <h2><span class="num">§ 07</span> A taxonomy of DLL hijacking</h2>
+  <p class="sub">Five flavors of the same idea: get the loader to load <em>your</em> DLL instead of the real one.</p>
+
+  <p>Every variation of "DLL hijacking" reduces to abusing one of the steps in the loader path. Knowing the taxonomy lets you predict the telemetry signature of each.</p>
+
+  <h3>1. Search-order hijacking</h3>
+  <p>Drop a malicious DLL with the same name as one the target loads, in a directory that the search hits <em>before</em> the legitimate one. Classic case: target loads <code>VERSION.DLL</code> by name; you place your <code>VERSION.DLL</code> in the application directory (search step 1), and the loader finds yours before <code>System32</code>'s (step 2). Detection: image-load events for unsigned DLLs in non-standard paths, especially when a signed legitimate DLL of the same name exists in System32.</p>
+
+  <h3>2. Side-loading (DLL planting)</h3>
+  <p>Distribute a benign-signed application alongside a malicious DLL it depends on. The signed app launches, loads the DLL from its own directory (fully expected behavior), and the attacker's code runs under the cover of the signed process. Heavily used in supply-chain and initial access. Detection: signed parent process + unsigned image load in the same directory, where the unsigned DLL is unique to this victim's host.</p>
+
+  <h3>3. Phantom DLL hijacking</h3>
+  <p>Target a DLL that an application <em>tries</em> to load but which doesn't exist on the system. Because the loader gets a "file not found" and falls through, attackers can plant their DLL in a writable location and satisfy the load. The Unit 42 article on <code>msdtc.exe</code> loading a nonexistent <code>oci.dll</code> is the canonical case study. Detection: unsigned DLL appearing where there was previously a load failure for the same name.</p>
+
+  <h3>4. KnownDLLs override (admin-only)</h3>
+  <p>Modify the <code>HKLM\System\CCS\Control\Session Manager\KnownDLLs</code> registry list to remove a critical DLL, then plant your version. Requires admin <em>and</em> a reboot for changes to take effect (KnownDLLs sections are built at boot). High-impact but high-noise &mdash; registry modifications to that key are textbook hunt targets.</p>
+
+  <h3>5. DLL search order via <code>SetDllDirectory</code> abuse</h3>
+  <p>Instead of dropping a DLL, change where the loader looks. <code>SetDllDirectory</code> alters the search path for the calling process and, critically, <em>disables</em> SafeDllSearchMode while a path is set. An attacker with code execution can use this primitive to redirect subsequent <code>LoadLibrary</code> calls. Detection: <code>SetDllDirectory</code> calls themselves are not always logged, but the resulting unsigned image loads from non-standard paths are.</p>
+
+  <div class="telemetry">
+    <strong>Hunt template:</strong> for any signed parent process, find image-load events where the loaded DLL is (a) unsigned, (b) in a directory writable by non-admin users, and (c) has a same-named twin in <code>System32</code>. That single query catches the majority of search-order hijacking and side-loading in the wild. False-positive rate is governed by how messy your software inventory is &mdash; in mature environments, the signal is clean.
+  </div>
+
+  <hr class="rule">
+
+  <!-- ========== § 08 ========== -->
+  <div class="deck">
+    <div class="deck-title">§ 08 &nbsp;·&nbsp; the 30-second recall</div>
+    <h2 style="margin-top: 6px;">Flashcards</h2>
+    <p class="deck-sub">Eight questions. If you can answer all, you own the loader.</p>
+
+    <div class="card-flip" onclick="this.classList.toggle('open')">
+      <div class="q">When the kernel finishes setting up a new process, where does it transfer control? Why isn't it your <code>main</code>?</div>
+      <div class="a">It transfers to <code>ntdll!LdrInitializeThunk</code>. <code>main</code> can't run yet because the IAT hasn't been resolved &mdash; calls to imported functions would jump to garbage. The loader has to map every dependent DLL, run TLS callbacks, run each <code>DllMain</code>, and only then call the EXE's entry point (which itself calls <code>main</code> after CRT init).</div>
+    </div>
+
+    <div class="card-flip" onclick="this.classList.toggle('open')">
+      <div class="q">What's the canonical call stack from <code>LoadLibrary</code> to <code>DllMain</code>?</div>
+      <div class="a"><code>kernelbase!LoadLibraryExW</code> → <code>ntdll!LdrLoadDll</code> → <code>ntdll!LdrpLoadDll</code> → <code>ntdll!LdrpLoadDllInternal</code> → <code>ntdll!LdrpPrepareModuleForExecution</code> → <code>ntdll!LdrpInitializeGraphRecurse</code> → <code>ntdll!LdrpCallInitRoutine</code> → <code>foo!DllMain</code>. The single transition out of <code>ntdll</code> at <code>LdrpCallInitRoutine</code> is where foreign code first runs.</div>
+    </div>
+
+    <div class="card-flip" onclick="this.classList.toggle('open')">
+      <div class="q">Why can you not hijack <code>kernel32.dll</code> by dropping a malicious copy next to a target executable?</div>
+      <div class="a">Because <code>kernel32.dll</code> is in the KnownDLLs registry list. The kernel mapped the real <code>kernel32.dll</code> as a named section object at boot. When any process needs <code>kernel32.dll</code>, the loader finds it in the KnownDLLs section before consulting the disk-based search order. Bypassing this requires modifying <code>HKLM\System\CCS\Control\Session Manager\KnownDLLs</code> and rebooting &mdash; admin-only, high-noise.</div>
+    </div>
+
+    <div class="card-flip" onclick="this.classList.toggle('open')">
+      <div class="q">SafeDllSearchMode is set to 0. What changes about the search order, and why is it dangerous?</div>
+      <div class="a">The current working directory moves from position 5 (after the system directories) to position 2 (right after the application directory). An attacker who controls the CWD of any process &mdash; for example by tricking a user into opening a file from a network share &mdash; can plant DLLs that the process will load before the real ones in <code>System32</code>. SafeDllSearchMode = 1 is default since XP SP2; modern hardening guides verify it explicitly.</div>
+    </div>
+
+    <div class="card-flip" onclick="this.classList.toggle('open')">
+      <div class="q">An attacker has hijacked a DLL load. Their <code>DllMain</code> runs. Why do they typically spawn a thread and return immediately, instead of doing real work in <code>DllMain</code>?</div>
+      <div class="a">Loader lock. <code>DllMain</code> runs with the process's loader lock held. Calling APIs that themselves load DLLs (most of <code>user32</code>, <code>shell32</code>, <code>ole32</code>, networking) deadlocks the process. <code>CreateThread</code> is one of the few safe primitives. The thread runs after <code>DllMain</code> returns, with the lock released, and can do whatever it wants. Microsoft's "DllMain best practices" doc is the authoritative restriction list.</div>
+    </div>
+
+    <div class="card-flip" onclick="this.classList.toggle('open')">
+      <div class="q">What does <code>PsSetLoadImageNotifyRoutine</code> do, and why is it the foundational EDR primitive?</div>
+      <div class="a">It registers a kernel callback that fires every time the kernel maps an executable image into any process &mdash; main EXEs and DLLs both. The callback receives the image base, size, full path, and target process. This happens <em>before</em> <code>DllMain</code> runs and cannot be evaded from user mode. EDRs use this for: image hashing, signing verification, IOC matching, optional blocking. To bypass, you need to either unload the EDR's driver (kernel exploit / BYOVD) or get your code to run before the callback registers (typically impossible).</div>
+    </div>
+
+    <div class="card-flip" onclick="this.classList.toggle('open')">
+      <div class="q">A process loads <code>oci.dll</code> from a user-writable directory; <code>oci.dll</code> doesn't exist in <code>System32</code>. What technique is this and how do you hunt it?</div>
+      <div class="a">Phantom DLL hijacking. The application code calls <code>LoadLibrary("oci.dll")</code> expecting a system DLL that doesn't actually exist on the box. The loader falls through the search order, finds the attacker's planted file, loads it. Hunt: image-load events for DLLs (a) loaded from non-System32 paths, (b) unsigned, and (c) where the same name was historically not present on the host. Unit 42's analysis of msdtc.exe and Cortex XDR's "Phantom DLL Loading" alert template.</div>
+    </div>
+
+    <div class="card-flip" onclick="this.classList.toggle('open')">
+      <div class="q">Walk through what an EDR sees when an attacker uses search-order hijacking against a signed application.</div>
+      <div class="a">The signed parent process spawns normally (clean Sysmon Event 1). The kernel's image-load callback fires for the main EXE (signed, expected). Then a second image-load callback fires for the planted DLL: same parent process, but the DLL is unsigned, in the application directory, and has a same-named legitimate twin in <code>System32</code>. That triple &mdash; signed parent + unsigned child DLL + System32 twin exists &mdash; is the high-fidelity hunt query. Sysmon Event 7 has the path and signing status; ETW Microsoft-Windows-Kernel-Process has the same data without Sysmon dependency.</div>
+    </div>
+  </div>
+
+  <hr class="rule">
+
+  <!-- ========== § 09 ========== -->
+  <h2><span class="num">§ 09</span> Closing thought</h2>
+  <p>Four volumes in. Here is what we have built:</p>
+  <ul style="font-family: var(--serif); color: var(--ink); padding-left: 24px;">
+    <li style="margin-bottom: 8px;">Vol. 01 &mdash; the alphabet (data types).</li>
+    <li style="margin-bottom: 8px;">Vol. 02 &mdash; the static skeleton (PE format).</li>
+    <li style="margin-bottom: 8px;">Vol. 03 &mdash; the living state (PEB / TEB / LDR list).</li>
+    <li>Vol. 04 &mdash; the machinery that builds and maintains that state (the loader).</li>
+  </ul>
+  <p style="margin-top: 24px;">If you understand these four volumes well, you can read any tradecraft &mdash; reflective loading, manual mapping, hollowing, side-loading, doppelganging, herpaderping &mdash; and identify which structures are touched, which loader steps are bypassed or abused, and which detection chokepoints fire. None of those techniques are tricks pulled from a hat. They are all <em>compositions</em> of operations on the four layers above.</p>
+  <p>The same is true for detection engineering. Every credible EDR signal eventually grounds in: <em>did this image-load callback fire from a path we trust? Does this loaded module's <code>DllBase</code> match its signed image? Is loader lock being held by a thread doing something it shouldn't? Did <code>LdrLoadDll</code> just return a path nobody expected?</em></p>
+  <p>Next: <em class="pen">Vol. 05 &mdash; System Calls and the NT Layer</em>. We go below <code>ntdll.dll</code> &mdash; into the user/kernel transition itself. SSNs, syscall stubs, why <code>ntdll</code> is the only DLL you can rely on at the syscall boundary, and the entire family of techniques (Hell's Gate, Halo's Gate, Tartarus Gate, SysWhispers) that live in this seam &mdash; together with the kernel-side detection that watches for them.</p>
+
+  <footer class="end">
+    <div>filed under &middot; windows internals &middot; the loader &middot; offensive &amp; detection</div>
+    <div class="sig">&mdash; blacksunCUBE</div>
+  </footer>
+
+</div>
+<script src="/assets/js/notebook-guard.js" defer></script>
+</body>
+</html>
