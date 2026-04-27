@@ -1,0 +1,1171 @@
+---
+layout: null
+title: "Hooking & Unhooking"
+volume: "06"
+entry: "01"
+order: 601
+date: 2026-04-26
+description: "How EDRs install their visibility into your process, and the five families of techniques attackers use to take it back."
+---
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hooking &amp; Unhooking — a field notebook</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #14161a;
+    --bg-soft: #1b1e24;
+    --bg-card: #1f232a;
+    --ink: #e8e4d8;
+    --ink-dim: #a8a396;
+    --ink-faint: #6d6a5f;
+    --rule: #2b2f38;
+
+    --read:  #5ec2e0;
+    --read-bg: rgba(94,194,224,0.10);
+    --read-border: rgba(94,194,224,0.38);
+
+    --write: #e8b64a;
+    --write-bg: rgba(232,182,74,0.10);
+    --write-border: rgba(232,182,74,0.42);
+
+    --exec:  #e8624a;
+    --exec-bg: rgba(232,98,74,0.10);
+    --exec-border: rgba(232,98,74,0.42);
+
+    --pen:   #d9456b;
+    --pen-bg: rgba(217,69,107,0.10);
+
+    --tele:  #a590d9;
+    --tele-bg: rgba(165,144,217,0.10);
+    --tele-border: rgba(165,144,217,0.40);
+
+    --mono: 'JetBrains Mono', ui-monospace, monospace;
+    --serif: 'Crimson Pro', 'Iowan Old Style', 'Palatino', serif;
+    --sans: 'Space Grotesk', system-ui, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--serif);
+    font-size: 18px;
+    line-height: 1.65;
+    background-image:
+      radial-gradient(circle at 20% 10%, rgba(94,194,224,0.04) 0%, transparent 40%),
+      radial-gradient(circle at 85% 80%, rgba(232,98,74,0.04) 0%, transparent 45%),
+      repeating-linear-gradient(0deg, transparent 0, transparent 2px, rgba(255,255,255,0.006) 2px, rgba(255,255,255,0.006) 3px);
+    min-height: 100vh;
+  }
+
+  body::before {
+    content: "";
+    position: fixed; inset: 0;
+    pointer-events: none;
+    opacity: 0.035;
+    z-index: 0;
+    background-image: url("data:image/svg+xml;utf8,<svg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  }
+
+  .wrap { max-width: 920px; margin: 0 auto; padding: 80px 32px 160px; position: relative; z-index: 1; }
+
+  .masthead {
+    border-top: 2px solid var(--ink);
+    border-bottom: 1px solid var(--rule);
+    padding: 22px 0 18px;
+    margin-bottom: 72px;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+  .masthead .brand {
+    font-family: var(--sans);
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    font-size: 12px;
+    color: var(--ink-dim);
+  }
+  .masthead .brand span { color: var(--exec); }
+  .masthead .meta {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-faint);
+    letter-spacing: 0.05em;
+  }
+
+  h1 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: clamp(42px, 6vw, 64px);
+    line-height: 1.05;
+    letter-spacing: -0.015em;
+    margin: 0 0 14px;
+    color: var(--ink);
+  }
+  h1 em { font-style: italic; color: var(--ink-dim); font-weight: 400; }
+
+  .dek {
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 21px;
+    color: var(--ink-dim);
+    max-width: 640px;
+    margin: 0 0 24px;
+    line-height: 1.45;
+  }
+  .byline {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-faint);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 80px;
+    padding-bottom: 40px;
+    border-bottom: 1px dashed var(--rule);
+  }
+  .byline em { color: var(--pen); font-style: normal; }
+
+  h2 {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 26px;
+    letter-spacing: -0.01em;
+    margin: 80px 0 6px;
+    color: var(--ink);
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+  }
+  h2 .num {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--ink-faint);
+    letter-spacing: 0.1em;
+  }
+  h2 + .sub {
+    font-family: var(--serif);
+    font-style: italic;
+    color: var(--ink-dim);
+    margin: 0 0 32px;
+    font-size: 17px;
+  }
+
+  h3 {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 17px;
+    letter-spacing: 0.01em;
+    margin: 36px 0 10px;
+    color: var(--ink);
+  }
+
+  p { margin: 0 0 18px; }
+
+  code, .kw {
+    font-family: var(--mono);
+    font-size: 0.86em;
+    background: var(--bg-soft);
+    padding: 2px 6px;
+    border-radius: 3px;
+    color: var(--ink);
+    border: 1px solid var(--rule);
+  }
+
+  strong { color: var(--ink); font-weight: 600; }
+  em.pen { color: var(--pen); font-style: italic; font-weight: 500; }
+
+  .legend {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0;
+    margin: 0 0 56px;
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    overflow: hidden;
+    background: var(--bg-card);
+  }
+  .legend-item { padding: 22px 20px; border-right: 1px solid var(--rule); }
+  .legend-item:last-child { border-right: none; }
+  .legend-item .tag {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 2px;
+  }
+  .legend-item.r .tag { background: var(--read-bg); color: var(--read); border: 1px solid var(--read-border); }
+  .legend-item.w .tag { background: var(--write-bg); color: var(--write); border: 1px solid var(--write-border); }
+  .legend-item.x .tag { background: var(--exec-bg); color: var(--exec); border: 1px solid var(--exec-border); }
+  .legend-item h4 {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 15px;
+    margin: 0 0 6px;
+    color: var(--ink);
+  }
+  .legend-item p {
+    font-family: var(--serif);
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--ink-dim);
+    margin: 0;
+  }
+  @media (max-width: 680px) {
+    .legend { grid-template-columns: 1fr; }
+    .legend-item { border-right: none; border-bottom: 1px solid var(--rule); }
+    .legend-item:last-child { border-bottom: none; }
+  }
+
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--rule);
+    border-radius: 3px;
+    padding: 24px 26px;
+    margin: 24px 0;
+  }
+  .card.read  { border-left-color: var(--read); }
+  .card.write { border-left-color: var(--write); }
+  .card.exec  { border-left-color: var(--exec); }
+
+  .card-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+  .card-head .type-name {
+    font-family: var(--mono);
+    font-weight: 700;
+    font-size: 17px;
+    color: var(--ink);
+  }
+  .tags { display: flex; gap: 6px; margin-left: auto; }
+  .pill {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    padding: 3px 8px;
+    border-radius: 2px;
+    text-transform: uppercase;
+  }
+  .pill.r { background: var(--read-bg); color: var(--read); border: 1px solid var(--read-border); }
+  .pill.w { background: var(--write-bg); color: var(--write); border: 1px solid var(--write-border); }
+  .pill.x { background: var(--exec-bg); color: var(--exec); border: 1px solid var(--exec-border); }
+
+  .gloss {
+    font-family: var(--serif);
+    font-style: italic;
+    color: var(--ink-dim);
+    font-size: 15px;
+    margin: 0 0 12px;
+  }
+
+  pre {
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.6;
+    background: #0f1116;
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    padding: 16px 18px;
+    overflow-x: auto;
+    margin: 14px 0;
+    color: #cdd1d8;
+  }
+  pre .c  { color: var(--ink-faint); font-style: italic; }
+  pre .k  { color: #b98dd0; }
+  pre .t  { color: #7dc9a9; }
+  pre .s  { color: #d8b36b; }
+  pre .n  { color: #e89069; }
+  pre .fn { color: #6db6d6; }
+  pre .m  { color: var(--pen); }
+  pre .fld { color: var(--write); }
+  pre .off { color: var(--tele); }
+
+  .hl-r { background: var(--read-bg); color: var(--read); padding: 1px 4px; border-radius: 2px; }
+  .hl-w { background: var(--write-bg); color: var(--write); padding: 1px 4px; border-radius: 2px; }
+  .hl-x { background: var(--exec-bg); color: var(--exec); padding: 1px 4px; border-radius: 2px; }
+
+  .margin {
+    border-left: 2px solid var(--pen);
+    background: var(--pen-bg);
+    padding: 14px 16px 14px 18px;
+    margin: 20px 0;
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 15px;
+    color: var(--ink);
+    line-height: 1.55;
+    position: relative;
+  }
+  .margin::before {
+    content: "margin note";
+    position: absolute;
+    top: -9px;
+    left: 14px;
+    background: var(--bg);
+    padding: 0 8px;
+    font-family: var(--mono);
+    font-size: 10px;
+    font-style: normal;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--pen);
+  }
+
+  .telemetry {
+    border: 1px solid var(--tele-border);
+    background: var(--tele-bg);
+    padding: 14px 16px 14px 18px;
+    margin: 20px 0;
+    border-radius: 3px;
+    position: relative;
+    font-family: var(--serif);
+    font-size: 14.5px;
+    line-height: 1.55;
+    color: var(--ink);
+  }
+  .telemetry::before {
+    content: "telemetry handoff";
+    position: absolute;
+    top: -9px;
+    left: 14px;
+    background: var(--bg);
+    padding: 0 8px;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--tele);
+  }
+  .telemetry strong { color: var(--tele); font-weight: 600; }
+  .telemetry code { font-size: 0.85em; }
+
+  .twin {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin: 20px 0;
+  }
+  @media (max-width: 680px) { .twin { grid-template-columns: 1fr; } }
+  .take {
+    background: var(--bg-soft);
+    border: 1px solid var(--rule);
+    padding: 16px 18px;
+    border-radius: 3px;
+  }
+  .take h5 {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    margin: 0 0 10px;
+  }
+  .take.red h5  { color: var(--exec); }
+  .take.blue h5 { color: var(--read); }
+  .take p { font-size: 14px; line-height: 1.55; margin: 0; color: var(--ink-dim); }
+  .take p strong { color: var(--ink); }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 24px 0;
+    font-size: 14px;
+  }
+  th, td {
+    text-align: left;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+  }
+  th {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+    border-bottom: 2px solid var(--ink);
+  }
+  td { font-family: var(--serif); color: var(--ink); }
+  td:first-child {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--ink);
+    width: 32%;
+  }
+
+  /* hook anatomy diagram */
+  .anatomy {
+    margin: 30px 0;
+    padding: 24px;
+    background: #0f1116;
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+  }
+  .anatomy .caption {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-bottom: 18px;
+  }
+  .frame-pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 8px;
+  }
+  @media (max-width: 680px) { .frame-pair { grid-template-columns: 1fr; } }
+  .stub {
+    background: var(--bg-card);
+    border: 1px solid var(--rule);
+    padding: 12px 14px;
+    border-radius: 2px;
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.65;
+  }
+  .stub-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--ink-faint);
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px dashed var(--rule);
+  }
+  .stub.before { border-left: 3px solid var(--read); }
+  .stub.before .stub-label { color: var(--read); }
+  .stub.after { border-left: 3px solid var(--exec); }
+  .stub.after .stub-label { color: var(--exec); }
+  .stub .b { color: var(--ink-faint); }
+  .stub .ins { color: var(--ink); }
+  .stub .hooked { color: var(--exec); font-weight: 700; }
+  .stub .preserved { color: var(--read); }
+
+  /* injection sequence */
+  .sequence {
+    margin: 28px 0;
+    padding: 24px;
+    background: #0f1116;
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+  }
+  .sequence .caption {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-bottom: 18px;
+  }
+  .step-row {
+    display: grid;
+    grid-template-columns: 32px 1fr 1.4fr;
+    gap: 12px;
+    align-items: center;
+    padding: 10px 14px;
+    border: 1px solid var(--rule);
+    background: var(--bg-card);
+    margin-bottom: 4px;
+    border-left: 3px solid var(--ink-faint);
+  }
+  .step-row.kernel { border-left-color: var(--exec); }
+  .step-row.bridge { border-left-color: var(--pen); }
+  .step-row.user { border-left-color: var(--read); }
+  .step-row .n {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-faint);
+    font-weight: 700;
+  }
+  .step-row .what {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--ink);
+  }
+  .step-row .where {
+    font-family: var(--serif);
+    font-style: italic;
+    color: var(--ink-dim);
+    font-size: 13.5px;
+  }
+  @media (max-width: 680px) {
+    .step-row { grid-template-columns: 26px 1fr; }
+    .step-row .where { display: none; }
+  }
+
+  /* unhook techniques table */
+  .unhook-table {
+    margin: 28px 0;
+    padding: 20px;
+    background: #0f1116;
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+  }
+  .unhook-table .caption {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-bottom: 14px;
+  }
+  .technique {
+    background: var(--bg-card);
+    border: 1px solid var(--rule);
+    padding: 14px 16px;
+    margin-bottom: 8px;
+    border-left: 3px solid var(--ink-faint);
+    border-radius: 2px;
+  }
+  .technique.t1 { border-left-color: var(--read); }
+  .technique.t2 { border-left-color: var(--write); }
+  .technique.t3 { border-left-color: var(--pen); }
+  .technique.t4 { border-left-color: var(--tele); }
+  .technique.t5 { border-left-color: var(--exec); }
+
+  .technique .name {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 14.5px;
+    color: var(--ink);
+    margin-bottom: 2px;
+  }
+  .technique .name .src {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--ink-faint);
+    margin-left: 8px;
+    font-weight: 400;
+    letter-spacing: 0.05em;
+  }
+  .technique .desc {
+    font-family: var(--serif);
+    font-size: 14px;
+    color: var(--ink-dim);
+    line-height: 1.55;
+    margin-top: 6px;
+  }
+  .technique .tradeoff {
+    font-family: var(--mono);
+    font-size: 11px;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed var(--rule);
+    color: var(--ink-faint);
+    line-height: 1.55;
+  }
+  .technique .tradeoff strong { color: var(--write); font-weight: 600; }
+
+  .rule {
+    border: none;
+    border-top: 1px dashed var(--rule);
+    margin: 64px 0;
+    position: relative;
+    text-align: center;
+  }
+  .rule::after {
+    content: "§";
+    position: absolute;
+    top: -14px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg);
+    padding: 0 14px;
+    color: var(--ink-faint);
+    font-family: var(--serif);
+    font-size: 20px;
+  }
+
+  .callout {
+    background: linear-gradient(180deg, var(--bg-card) 0%, var(--bg-soft) 100%);
+    border: 1px solid var(--rule);
+    border-top: 3px solid var(--pen);
+    padding: 22px 24px;
+    margin: 32px 0;
+    border-radius: 3px;
+  }
+  .callout .label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--pen);
+    margin-bottom: 8px;
+  }
+  .callout p:last-child { margin-bottom: 0; }
+
+  .deck { margin: 40px 0; }
+  .deck-title {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--pen);
+    margin-bottom: 4px;
+  }
+  .deck-sub {
+    font-family: var(--serif);
+    font-style: italic;
+    color: var(--ink-dim);
+    margin: 0 0 24px;
+    font-size: 16px;
+  }
+  .card-flip {
+    background: var(--bg-card);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    margin: 12px 0;
+    cursor: pointer;
+    transition: border-color 0.15s;
+    overflow: hidden;
+  }
+  .card-flip:hover { border-color: var(--pen); }
+  .card-flip .q {
+    padding: 18px 22px;
+    font-family: var(--serif);
+    color: var(--ink);
+    font-size: 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+  }
+  .card-flip .q::after {
+    content: "flip";
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    flex-shrink: 0;
+  }
+  .card-flip .a {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.25s ease-out, padding 0.25s ease-out;
+    padding: 0 22px;
+    font-family: var(--serif);
+    color: var(--ink-dim);
+    font-size: 15px;
+    line-height: 1.5;
+    background: var(--bg-soft);
+  }
+  .card-flip.open { border-color: var(--pen); }
+  .card-flip.open .a {
+    max-height: 700px;
+    padding: 16px 22px 18px;
+    border-top: 1px solid var(--rule);
+  }
+  .card-flip.open .q::after { content: "close"; color: var(--pen); }
+  .card-flip .a code { font-size: 0.85em; }
+
+  .end {
+    margin-top: 100px;
+    padding-top: 40px;
+    border-top: 2px solid var(--ink);
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-faint);
+    letter-spacing: 0.05em;
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .end .sig { color: var(--exec); font-weight: 700; letter-spacing: 0.15em; }
+
+  ::selection { background: var(--pen); color: var(--bg); }
+
+  /* ============== Mobile responsive patch ============== */
+  @media (max-width: 720px) {
+    body { font-size: 16px; line-height: 1.6; }
+    .wrap { padding: 48px 18px 100px; }
+    h1 { font-size: 32px !important; line-height: 1.1; }
+    .dek { font-size: 17px; }
+    h2 { font-size: 22px; flex-wrap: wrap; gap: 8px; }
+    h2 .num { font-size: 11px; }
+    h2 + .sub { font-size: 15px; }
+    h3 { font-size: 16px; }
+    .card { padding: 18px 16px; margin: 18px 0; }
+    .card-head { gap: 8px; }
+    .card-head .type-name { font-size: 16px; word-break: break-all; }
+    .tags { margin-left: 0; flex-wrap: wrap; }
+    pre {
+      font-size: 12px;
+      padding: 12px 14px;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .legend, .legend-item { padding: 16px 14px; }
+    .twin { gap: 10px; }
+    .take { padding: 14px 14px; }
+    table { font-size: 13px; }
+    th, td { padding: 8px 10px; }
+    td:first-child { width: auto; }
+    .anatomy, .sequence, .unhook-table { padding: 16px 14px; }
+    .stub { font-size: 11px; padding: 10px 12px; }
+    .step-row { font-size: 12px; padding: 9px 12px; gap: 8px; }
+    .technique { padding: 12px 14px; }
+    .end { flex-direction: column; align-items: flex-start; }
+    .masthead { padding: 16px 0 14px; margin-bottom: 48px; }
+    .masthead .brand { font-size: 11px; }
+    .byline { margin-bottom: 56px; padding-bottom: 28px; font-size: 11px; }
+  }
+
+  /* Tablet adjustments */
+  @media (min-width: 721px) and (max-width: 920px) {
+    .wrap { padding: 64px 24px 120px; }
+    h1 { font-size: clamp(36px, 6vw, 50px); }
+  }
+</style>
+</head>
+<body data-nb-protected>
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="brand">blacksun<span>CUBE</span> &nbsp;·&nbsp; field notebook</div>
+    <div class="meta">vol. 06 / entry: hooking &amp; unhooking</div>
+  </header>
+
+  <h1>Hooking &amp; Unhooking,<br><em>or: how the EDR moves into your house, and how an attacker tries to evict it.</em></h1>
+  <p class="dek">A walk through the bytes that get rewritten when a security product loads, the ways those bytes get put there, and the five families of techniques attackers use to clean them up &mdash; all with the detection signature each one leaves behind.</p>
+  <div class="byline">blacksun<span style="color:var(--exec);">CUBE</span> field notebook &middot; vol. 06 &middot; <em>builds on vol. 04 (loader) &amp; vol. 05 (syscalls)</em></div>
+
+  <p>Vol. 05 ended with this claim: <em>by the end of vol. 06, you should be able to look at any process and tell, by reading <code>ntdll</code>'s first 16 bytes, whether an EDR has visited.</em> That's the goal. By the time you finish this volume, you should also know <em>which</em> EDR pattern was used, what the EDR's DLL is doing on each call, and what would happen if you tried to unhook &mdash; including the detection signal that would fire as you did.</p>
+
+  <p>Three concrete things matter here:</p>
+
+  <ol style="font-family: var(--serif); color: var(--ink); padding-left: 24px;">
+    <li style="margin-bottom: 10px;"><strong>The byte patterns themselves.</strong> A hook is a small, recognizable change to function prologue bytes. There are three or four canonical shapes; you'll memorize them in this volume.</li>
+    <li style="margin-bottom: 10px;"><strong>The injection mechanism.</strong> EDR DLLs don't appear by magic. There's a specific kernel-callback-driven sequence that brings them into your process before <code>main</code> runs. Understanding it tells you why "starting suspended" used to work and why modern EDRs have closed that gap.</li>
+    <li><strong>The taxonomy of unhook approaches.</strong> Five distinct technique families, each with its own detection signature. Knowing them lets you read any "EDR bypass loader" on GitHub and immediately classify the approach and predict what would catch it.</li>
+  </ol>
+
+  <p>Same axes you know:</p>
+
+  <div class="legend">
+    <div class="legend-item r">
+      <span class="tag">R &middot; Read</span>
+      <h4>Recognize the patch</h4>
+      <p>The byte patterns at function prologues that mark a hooked binary. Five-byte <code>E9</code> jumps, fourteen-byte absolute jumps, hardware breakpoints with no patch at all.</p>
+    </div>
+    <div class="legend-item w">
+      <span class="tag">W &middot; Write</span>
+      <h4>Apply / remove</h4>
+      <p>Changing memory protection on the <code>.text</code> section, writing the trampoline, restoring originals from a clean source. Every step leaves telemetry.</p>
+    </div>
+    <div class="legend-item x">
+      <span class="tag">X &middot; Execute</span>
+      <h4>The redirect</h4>
+      <p>What runs when control transfers to the EDR's analysis routine, and what happens (or doesn't) when it returns.</p>
+    </div>
+  </div>
+
+  <hr class="rule">
+
+  <!-- ========== § 01 ========== -->
+  <h2><span class="num">§ 01</span> What a hook actually is</h2>
+  <p class="sub">A small, deliberate corruption of function prologue bytes &mdash; nothing more, nothing less.</p>
+
+  <p>Strip away every blog post and conference talk; a user-mode API hook is one thing: <em>the first few bytes of a function in a loaded DLL have been overwritten with a jump to somewhere else</em>. Everything in the next 60 pages of this notebook is a variation on that idea.</p>
+
+  <p>The function being hooked is almost always in <code>ntdll.dll</code>, because that's where the syscall stubs live (vol. 05) and that's the last user-mode chokepoint before kernel transition. The <em>somewhere else</em> the hook jumps to is an analysis routine inside the EDR's own DLL, also loaded into the process. After the analysis routine decides "this call is safe", it jumps to a <strong>trampoline</strong> &mdash; a small chunk of memory the EDR allocated, containing the original bytes it overwrote, followed by a jump back into the original function past the patched bytes.</p>
+
+  <p>That's the whole mechanism. <em>Patch + trampoline.</em> Everything else is engineering.</p>
+
+  <div class="anatomy">
+    <div class="caption">ntdll!NtAllocateVirtualMemory &middot; same function, before &amp; after EDR hook</div>
+    <div class="frame-pair">
+      <div class="stub before">
+        <div class="stub-label">Before EDR loads</div>
+<span class="b">7ffa`c476f0f0</span> <span class="ins">4c 8b d1</span>           <span class="b">; mov r10, rcx</span>
+<span class="b">7ffa`c476f0f3</span> <span class="ins">b8 18 00 00 00</span>     <span class="b">; mov eax, 18h  (SSN)</span>
+<span class="b">7ffa`c476f0f8</span> <span class="ins">f6 04 25 ...</span>        <span class="b">; test byte ptr [..]</span>
+<span class="b">7ffa`c476f100</span> <span class="ins">75 03</span>              <span class="b">; jne short</span>
+<span class="b">7ffa`c476f102</span> <span class="ins">0f 05</span>              <span class="b">; syscall</span>
+<span class="b">7ffa`c476f104</span> <span class="ins">c3</span>                 <span class="b">; ret</span>
+      </div>
+      <div class="stub after">
+        <div class="stub-label">After EDR DLL injection</div>
+<span class="b">7ffa`c476f0f0</span> <span class="hooked">e9 a3 12 02 00</span>     <span class="b">; jmp EDR.dll!Inspect</span>
+<span class="b">7ffa`c476f0f5</span> <span class="ins">cc cc cc</span>           <span class="b">; int3 padding (or original bytes)</span>
+<span class="b">7ffa`c476f0f8</span> <span class="preserved">f6 04 25 ...</span>        <span class="b">; test byte ptr [..]</span>
+<span class="b">7ffa`c476f100</span> <span class="preserved">75 03</span>              <span class="b">; jne short</span>
+<span class="b">7ffa`c476f102</span> <span class="preserved">0f 05</span>              <span class="b">; syscall</span>
+<span class="b">7ffa`c476f104</span> <span class="preserved">c3</span>                 <span class="b">; ret</span>
+      </div>
+    </div>
+  </div>
+
+  <p>Notice what didn't change: the <code>syscall</code> instruction itself, and the bytes after the patch. The first 5 bytes of the stub are gone &mdash; replaced with a single <code>JMP rel32</code> (opcode <code>E9</code>, plus 4-byte signed offset to the EDR's analysis routine). The original 5 bytes (<code>4c 8b d1 b8 18</code>) are now in the EDR's trampoline elsewhere in memory.</p>
+
+  <p>When code calls <code>NtAllocateVirtualMemory</code>:</p>
+
+  <ol style="font-family: var(--serif); color: var(--ink); padding-left: 24px;">
+    <li style="margin-bottom: 8px;">CPU lands on byte 0 of the hooked stub, executes <code>E9 a3 12 02 00</code>, jumps to the EDR's analysis routine.</li>
+    <li style="margin-bottom: 8px;">EDR routine inspects arguments (<code>RCX</code>, <code>RDX</code>, <code>R8</code>, <code>R9</code>, stack), call stack, and decides: allow, block, or alert.</li>
+    <li style="margin-bottom: 8px;">If allowed, EDR jumps to its trampoline.</li>
+    <li style="margin-bottom: 8px;">Trampoline executes the original 5 bytes (<code>mov r10, rcx</code> + <code>mov eax, 18h</code>) and then <code>jmp</code>s back to <code>NtAllocateVirtualMemory + 5</code>, where the unpatched <code>test byte ptr [..]</code> instruction continues normally.</li>
+    <li>The original syscall fires, kernel does its work, returns to caller. The caller never knows the EDR was there.</li>
+  </ol>
+
+  <div class="margin">
+    The <code>4c 8b d1 b8 18 00 00 00</code> sequence at the top of every <code>Nt*</code> function is not a coincidence &mdash; it's the same 8-byte pattern (<code>mov r10, rcx</code> + <code>mov eax, ssn</code>) that vol. 05 introduced. That 8-byte regularity is precisely what lets Hell's Gate find SSNs without symbols, and precisely what lets a hook detector find the patched functions.
+  </div>
+
+  <hr class="rule">
+
+  <!-- ========== § 02 ========== -->
+  <h2><span class="num">§ 02</span> Three flavors of inline hook</h2>
+  <p class="sub">Same idea, three byte-level shapes &mdash; learn them and you can recognize any EDR's patch on sight.</p>
+
+  <h3>Flavor 1 &mdash; Five-byte relative jump (the classic)</h3>
+
+  <div class="card exec">
+    <div class="card-head">
+      <span class="type-name">JMP rel32 &mdash; opcode E9</span>
+      <div class="tags"><span class="pill x">execute</span></div>
+    </div>
+    <p class="gloss">5 bytes. Reaches anywhere within ±2 GiB of the patch site. The default for AVs and lightweight EDRs.</p>
+<pre><span class="c">; Patch bytes:
+;    E9 &lt;rel32&gt;
+;
+; Where &lt;rel32&gt; is computed as:
+;    target_address - (patch_address + 5)
+;
+; Limitation: the target must live within ±2 GiB of the patched function.
+; Almost always true in practice — both ntdll and the EDR's DLL are mapped
+; in the same process address space, well within 2 GiB of each other.</span></pre>
+  </div>
+
+  <p>This is what Microsoft Detours uses, what most commercial AVs use, and what Hell's Gate / Halo's Gate detect by checking for byte <code>0xE9</code> at offset 0 of an <code>Nt*</code> stub. <em>If you see <code>E9</code> at the prologue of any <code>Nt*</code> function, the function is hooked.</em></p>
+
+  <h3>Flavor 2 &mdash; Fourteen-byte absolute jump (used when ±2 GiB isn't enough)</h3>
+
+  <div class="card exec">
+    <div class="card-head">
+      <span class="type-name">FF 25 + qword &mdash; absolute indirect jump</span>
+      <div class="tags"><span class="pill x">execute</span></div>
+    </div>
+    <p class="gloss">14 bytes. Reaches anywhere in 64-bit space. More complete coverage of <code>Nt*</code> stubs that have multiple complete instructions in the first 14 bytes.</p>
+<pre><span class="c">; Patch bytes (14 total):
+;    FF 25 00 00 00 00         ; jmp [rip+0]
+;    &lt;qword target&gt;             ; absolute 8-byte address
+
+; Or alternatively, MOV-IMM + JMP register (12 bytes, slightly less common):
+;    48 B8 &lt;qword target&gt;       ; mov rax, target
+;    FF E0                       ; jmp rax</span></pre>
+  </div>
+
+  <p>Some EDRs use this when they want to be sure they overwrite enough bytes to capture every possible first instruction (the prologue of <code>NtAllocateVirtualMemory</code> includes a <code>test</code> with an immediate operand &mdash; depending on version, that might be 9 or 10 bytes by itself). Recognizable by <code>FF 25</code> or <code>48 B8</code> at offset 0.</p>
+
+  <h3>Flavor 3 &mdash; Single-instruction replacement ("atomic" hook)</h3>
+
+  <p>Rarer, but worth knowing: some EDRs replace exactly <em>one</em> middle instruction with the jump. Specifically, the <code>mov eax, &lt;SSN&gt;</code> instruction at offset 3 (5 bytes itself) is replaced with the <code>E9</code> jump. The advantage is atomicity: a single 5-byte instruction is rewritten as a single 5-byte instruction, no torn-write window. The first 3 bytes (<code>4c 8b d1</code>) survive.</p>
+
+<pre><span class="c">; Atomic mid-function hook:
+;
+;    4C 8B D1                    ; mov r10, rcx        (untouched)
+;    E9 &lt;rel32&gt;                  ; jmp EDR             (was: mov eax, SSN)
+;    &lt;original padding bytes&gt;
+;
+; This is exactly the pattern that Tartarus' Gate (vol. 05) recognizes
+; via its 4C 8B D1 E9 ... heuristic.</span></pre>
+
+  <div class="telemetry">
+    <strong>Detection counterpart:</strong> a hook scanner walks every <code>Nt*</code> export and reads bytes at offsets 0 and 3. The unhooked stub starts with <code>4c 8b d1 b8</code>; if those 4 bytes don't match, something has been rewritten. False-positive rate is essentially zero on production Windows because Microsoft's syscall stubs follow this exact pattern. <strong>This is also exactly what Halo's / Tartarus' Gate use to recognize hooks &mdash; meaning offensive and defensive parties have the same detection logic running in the same process at the same time.</strong>
+  </div>
+
+  <hr class="rule">
+
+  <!-- ========== § 03 ========== -->
+  <h2><span class="num">§ 03</span> IAT &amp; EAT hooks: the alternative no-one really uses anymore</h2>
+  <p class="sub">An older approach worth knowing because it occasionally still appears in the wild.</p>
+
+  <p>Vol. 02 introduced the <strong>Import Address Table</strong> (IAT): an array of function pointers the loader fills in with the resolved addresses of every imported function, so when your code calls <code>VirtualAlloc</code>, the actual jump target is read from <code>IAT[VirtualAlloc]</code>. An <strong>IAT hook</strong> replaces that pointer with one to your inspection routine. No function bytes are modified anywhere &mdash; the original <code>VirtualAlloc</code> is untouched. You just intercept the dispatch layer above it.</p>
+
+  <p>The <strong>Export Address Table</strong> (EAT) is the same idea on the producer side: each exported function in a DLL has its address listed in the EAT. Patching the EAT means anyone who later calls <code>GetProcAddress</code> gets your address, not the real one.</p>
+
+  <table>
+    <tr><th>Approach</th><th>What gets modified</th><th>What it catches</th><th>Why it's mostly obsolete</th></tr>
+    <tr><td>IAT hook</td><td>Function pointer in your module's import table</td><td>Calls that go through that specific import</td><td>Only catches that one importing module. Direct calls via <code>GetProcAddress</code> &mdash; or any code that bypasses the IAT &mdash; sail through. EDRs need universal coverage; inline hooks at the source DLL provide it.</td></tr>
+    <tr><td>EAT hook</td><td>Function pointer in source DLL's export table</td><td>Future <code>GetProcAddress</code> lookups</td><td>Catches nothing already-resolved. Static IAT entries (resolved at load time) sail through. Only useful for late-bound calls.</td></tr>
+  </table>
+
+  <p>You'll still see IAT hooks in some EDR-internal contexts (e.g., for non-syscall callbacks), and certain DLP/insider-threat tools use them. For the syscall coverage problem &mdash; "see every <code>Nt*</code> call in this process" &mdash; inline hooks at <code>ntdll</code> dominate because they catch <em>all</em> callers in one shot.</p>
+
+  <hr class="rule">
+
+  <!-- ========== § 04 ========== -->
+  <h2><span class="num">§ 04</span> Hardware-breakpoint hooks (no patch at all)</h2>
+  <p class="sub">An EDR-side and offense-side technique. The bytes never change &mdash; the CPU's debug machinery does the redirect.</p>
+
+  <p>The CPU has 4 hardware breakpoint registers: <code>DR0</code> through <code>DR3</code>, with control via <code>DR6</code>/<code>DR7</code>. Each can hold a linear address; when execution (or read/write, depending on configuration) reaches that address, the CPU raises a <code>#DB</code> debug exception <em>before</em> the instruction at that address executes. If a Vectored Exception Handler is registered, it catches the exception, inspects the CPU context (which the OS hands to the handler, including the volatile registers), modifies what it wants, and returns &mdash; control resumes wherever <code>RIP</code> now points.</p>
+
+  <p>This gives you a hook that <em>doesn't touch the target's bytes at all</em>. The function looks pristine to a memory-integrity scanner. The only artifact is in the thread's debug registers and in the registered exception handler.</p>
+
+  <div class="card write">
+    <div class="card-head">
+      <span class="type-name">VEH + DR0 hook (typical pattern)</span>
+      <div class="tags"><span class="pill r">read</span><span class="pill w">write</span></div>
+    </div>
+<pre>1. <span class="fn">AddVectoredExceptionHandler</span>(FIRST, MyHandler);
+2. <span class="fn">GetThreadContext</span>(thread, &amp;ctx);
+3. ctx.<span class="fld">Dr0</span> = (DWORD64) target_function;          <span class="c">// where to break</span>
+4. ctx.<span class="fld">Dr7</span> |= <span class="n">0x1</span>;                                <span class="c">// L0 = 1 — enable DR0 break</span>
+5. <span class="fn">SetThreadContext</span>(thread, &amp;ctx);
+
+<span class="c">// When target_function executes, CPU raises #DB.
+// MyHandler fires. ctx-&gt;Rip points to target_function.
+// Inspect args (Rcx/Rdx/R8/R9), modify if you want, then either
+// step over (set TF=1, return EXCEPTION_CONTINUE_EXECUTION)
+// or redirect (overwrite ctx-&gt;Rip with a different address and return).</span></pre>
+  </div>
+
+  <h3>The 2024 evolution: VEH²</h3>
+
+  <p>The standard pattern above leaks a major IOC: <code>SetThreadContext</code> writing debug registers transitions through <code>NtSetContextThread</code> in the kernel, which in turn fires events on the <code>Microsoft-Windows-Kernel-Audit-API-Calls</code> ETW provider. Defenders watch for that. CrowdStrike researchers (Onofri &amp; Sonawane, BlackHat MEA 2023) demonstrated <strong>VEH²</strong>: <em>register the VEH, trigger your own exception, and modify the debug registers <em>from inside the handler</em>, where the OS has already given you a writeable <code>CONTEXT</code> struct &mdash; so no <code>SetThreadContext</code> call is needed.</em></p>
+
+  <p>That single change makes the technique substantially harder to spot. The <code>CONTEXT</code> struct passed to the VEH has volatile <code>Dr0</code>–<code>Dr7</code> fields; modifying them inside the handler is invisible to the kernel-audit provider that watches <code>NtSetContextThread</code>. fluxsec and others have published Rust ports of the same pattern (2024).</p>
+
+  <div class="margin">
+    Hardware-breakpoint hooks are a <em>hard</em> capability for both sides. Offensively, they let you intercept individual function calls without modifying any DLL bytes. Defensively, EDRs use the same primitive in reverse &mdash; setting hardware breakpoints on <code>syscall</code> instructions inside <code>ntdll</code> to catch indirect-syscall callers (<a style="color:var(--tele);">EvilBytecode/Detecting-Indirect-Syscalls, 2025</a>). Same instruction, different team. As always with these chapters: the same primitive serves whoever installs it first.
+  </div>
+
+  <hr class="rule">
+
+  <!-- ========== § 05 ========== -->
+  <h2><span class="num">§ 05</span> How EDR DLLs actually arrive in your process</h2>
+  <p class="sub">A kernel callback fires before your <code>main</code> runs, queues an APC, and the rest is inevitable.</p>
+
+  <p>The EDR's hooks live in a DLL. That DLL has to be in your process before any code you care about runs &mdash; otherwise the unhooked window between <code>main</code> and DLL injection is exactly where malware would do all its work. Modern EDRs solve this through the <code>PsSetCreateProcessNotifyRoutine(Ex)</code> + <code>PsSetLoadImageNotifyRoutine</code> kernel callbacks (vol. 04), combined with a kernel-to-user APC.</p>
+
+  <div class="sequence">
+    <div class="caption">EDR DLL injection &middot; canonical sequence (kernel callback → APC → loader)</div>
+    <div class="step-row kernel">
+      <div class="n">1</div>
+      <div class="what">CreateProcess() in parent</div>
+      <div class="where">user mode, parent process</div>
+    </div>
+    <div class="step-row kernel">
+      <div class="n">2</div>
+      <div class="what">nt!PspCreateProcess builds new EPROCESS</div>
+      <div class="where">kernel, address space ready</div>
+    </div>
+    <div class="step-row kernel">
+      <div class="n">3</div>
+      <div class="what">PsSetCreateProcessNotifyRoutineEx callback fires</div>
+      <div class="where">EDR driver receives notification</div>
+    </div>
+    <div class="step-row bridge">
+      <div class="n">4</div>
+      <div class="what">EDR driver: KeInitializeApc + KeInsertQueueApc</div>
+      <div class="where">user-mode APC queued on the new thread</div>
+    </div>
+    <div class="step-row user">
+      <div class="n">5</div>
+      <div class="what">ntdll!LdrInitializeThunk starts (vol. 04)</div>
+      <div class="where">first user-mode code in new process</div>
+    </div>
+    <div class="step-row user">
+      <div class="n">6</div>
+      <div class="what">ntdll!NtTestAlert / KiUserApcDispatcher</div>
+      <div class="where">queued APC fires here, before main</div>
+    </div>
+    <div class="step-row user">
+      <div class="n">7</div>
+      <div class="what">APC payload: tiny shellcode → LdrLoadDll(EDR.dll)</div>
+      <div class="where">EDR DLL loaded into process</div>
+    </div>
+    <div class="step-row user">
+      <div class="n">8</div>
+      <div class="what">EDR DllMain: VirtualProtect + write hooks</div>
+      <div class="where">ntdll prologues patched</div>
+    </div>
+    <div class="step-row user">
+      <div class="n">9</div>
+      <div class="what">control returns to LdrInitializeThunk → main</div>
+      <div class="where">your code runs, hooks already in place</div>
+    </div>
+  </div>
+
+  <p>Key insight: between step 5 and step 8, there's a <em>real</em> window of milliseconds during which <code>ntdll</code> is loaded but not yet hooked. <em>This is the window Perun's Fart, EDR-Preloading, and Early Cascade Injection all target.</em> If you can get <em>your</em> code to execute in this window &mdash; via APC injection earlier than the EDR's APC, or via a TLS callback in the EXE &mdash; you can capture a clean copy of <code>ntdll</code>, or stop the EDR DLL from loading at all.</p>
+
+  <h3>The arms race in process startup</h3>
+
+  <p>This is why the offensive research community spent 2023–2025 attacking the startup race. <strong>Outflank's Early Cascade Injection</strong> (October 2024) exploited <code>LdrLoadDll</code> internals during process creation to land before the EDR's APC fired. <strong>MalwareTech's EDR-Preloading</strong> (February 2024) hooked <code>KiUserApcDispatcher</code> in a parent-spawned suspended child to neutralize the EDR's incoming APC. Each technique targets one of the steps in the table above.</p>
+
+  <p>Modern EDRs respond by registering their callback as <em>early</em> as possible (kernel autoload at boot, hooks installed in the very first APC slot), and by having their kernel driver inject hooks <em>directly</em> from kernel mode if the user-mode APC racing fails. fluxsec's "Sanctum" research-EDR (2024) demonstrates the kernel-to-user APC path with shellcode that calls <code>LdrLoadDll</code> &mdash; the same pattern used by 0xPrimo's <code>KMDllInjector</code>.</p>
+
+  <hr class="rule">
+
+  <!-- ========== § 06 ========== -->
+  <h2><span class="num">§ 06</span> Five families of unhook</h2>
+  <p class="sub">Each one trades stealth for reliability differently. Know them, predict their detection signatures.</p>
+
+  <div class="unhook-table">
+    <div class="caption">unhook taxonomy &middot; offensive techniques, ordered by year of mainstream adoption</div>
+
+    <div class="technique t1">
+      <div class="name">1. Refresh from disk <span class="src">— ired.team / classic, 2019+</span></div>
+      <div class="desc">Open <code>C:\Windows\System32\ntdll.dll</code>, map it as a section, copy the clean <code>.text</code> bytes over the hooked ones in your loaded <code>ntdll</code>. Original technique. Conceptually simple, widely copy-pasted.</div>
+      <div class="tradeoff"><strong>Trade-off:</strong> opens a file handle to <code>ntdll.dll</code> from a non-system process &mdash; high-fidelity IOC. <code>NtCreateSection</code> with <code>SEC_IMAGE</code> on <code>ntdll</code> is logged via ETW. EDRs with file-access correlation flag this immediately. Also leaves two copies of <code>ntdll</code> in memory if not properly unmapped. <strong>Detection: very easy.</strong></div>
+    </div>
+
+    <div class="technique t2">
+      <div class="name">2. Refresh from KnownDLLs <span class="src">— variant, 2020+</span></div>
+      <div class="desc">Instead of opening <code>ntdll.dll</code> from disk, open the kernel-maintained <code>\KnownDlls\ntdll.dll</code> section directly via <code>NtOpenSection</code>. The KnownDLLs section was created at boot from a clean <code>ntdll.dll</code>, before any EDR could hook it. Same overwrite procedure as #1, but no disk I/O.</div>
+      <div class="tradeoff"><strong>Trade-off:</strong> avoids the disk read, but <code>NtOpenSection(\KnownDlls\ntdll.dll)</code> is itself an unusual call from non-loader code. EDRs with object-callback monitoring flag access to KnownDLLs entries. <strong>Detection: medium.</strong></div>
+    </div>
+
+    <div class="technique t3">
+      <div class="name">3. Perun's Fart (suspended child) <span class="src">— Reenz0h / Sektor7, 2022</span></div>
+      <div class="desc">Spawn a process in <code>CREATE_SUSPENDED</code> state, read its <code>ntdll</code> from memory before the EDR's APC has fired in that child, copy clean syscall stubs back to your own process. No disk read. Exploits the millisecond window between steps 5 and 8 in the injection sequence above.</div>
+      <div class="tradeoff"><strong>Trade-off:</strong> creating a suspended child process is itself a moderate IOC (process injection precursor). Modern EDRs that register their kernel callback early enough can hook the child <em>before</em> the parent reads its memory. <strong>Detection: medium-high; works less reliably against mature EDRs in 2026.</strong></div>
+    </div>
+
+    <div class="technique t4">
+      <div class="name">4. Process forking / cloning <span class="src">— reprgm Attack of the Clones, 2023</span></div>
+      <div class="desc">Use <code>NtCreateProcessEx</code> to clone the current process. The clone has no threads (so process/thread kernel callbacks don't fire), is invisible in Task Manager, and inherits the parent's memory map &mdash; including any clean <code>ntdll</code>. Copy <code>.text</code> from the clone, terminate it, profit.</div>
+      <div class="tradeoff"><strong>Trade-off:</strong> still requires writing to your own <code>ntdll!.text</code>, which means <code>VirtualProtect</code> on a non-private region. ETW-TI's <code>PROTECTVM_LOCAL</code> event fires. <strong>Detection: harder than #1–3 at the kernel-callback layer, but the protect-and-write pattern remains the chokepoint.</strong></div>
+    </div>
+
+    <div class="technique t5">
+      <div class="name">5. Selective in-memory unhook <span class="src">— S12 Dark Development, 2025</span></div>
+      <div class="desc">Combines #3 / #4 with surgical replacement: instead of overwriting the entire <code>.text</code> section, identify only the hooked stubs (offset-0 byte <code>0xE9</code> or <code>0xFF</code>) and copy only those individual 23-byte syscall prologues from the clean copy. Less memory traffic, smaller telemetry footprint, optionally restoring hooks before exit.</div>
+      <div class="tradeoff"><strong>Trade-off:</strong> still requires <code>NtProtectVirtualMemory</code> on the hooked region. Reduces but doesn't eliminate the patching IOC. State of the art for 2025/2026 detection-aware loaders. <strong>Detection: hardest of the five &mdash; the protection change is smaller and the write is brief, but ETW-TI still observes it.</strong></div>
+    </div>
+  </div>
+
+  <p>Across all five techniques, the unavoidable chokepoint is the same: <em>writing to the <code>.text</code> section of <code>ntdll</code> requires changing its memory protection, which fires telemetry</em>. Direct-syscall unhookers exist (calling <code>NtProtectVirtualMemory</code> via SSN to avoid the user-mode hook on <code>VirtualProtect</code>), but the kernel-side ETW-TI <code>PROTECTVM_LOCAL</code> event fires regardless of how the syscall was reached. Vol. 05's lesson applies: <em>the events fire in the kernel, regardless of invocation method</em>.</p>
+
+  <div class="callout">
+    <div class="label">honest assessment for 2026</div>
+    <p>Against legacy AV and EDRs that rely primarily on user-mode hooks, all five unhook families work. Against Defender for Endpoint, CrowdStrike Falcon, SentinelOne, Elastic Defend &mdash; products that deemphasize user-mode hooks in favor of kernel callbacks, ETW-TI, and call-stack analysis &mdash; <em>unhooking does almost nothing on its own</em>. The hwbp/NTDLL-Unhook README puts it bluntly: "Advanced EDRs like Microsoft Defender for Endpoint and Elastic don't even use usermode hooks anymore since they rely on kernel callbacks and ETW telemetry, so unhooking does literally nothing against them." This is true. Modern offensive operations against mature EDRs combine unhooking with call-stack spoofing (vol. 05) and careful telemetry awareness.</p>
+  </div>
+
+  <hr class="rule">
+
+  <!-- ========== § 07 ========== -->
+  <h2><span class="num">§ 07</span> Detection: how a defender catches all of this</h2>
+  <p class="sub">Five chokepoints, each with a clear telemetry signature.</p>
+
+  <h3>1. Hook-integrity hashing</h3>
+  <p>The simplest defensive primitive: at DLL-load time, after the EDR has installed its own hooks, take a SHA-256 of the <code>.text</code> section of <code>ntdll</code>. Periodically rehash and compare. Any change &mdash; including unhooking back to the original bytes &mdash; produces a different hash. fluxsec's research-EDR (2024) implements exactly this with a Rust thread that hashes every few seconds. <strong>Detection cost: trivial. False-positive rate: zero, because nothing legitimate modifies <code>ntdll!.text</code> after process startup.</strong></p>
+
+  <h3>2. ETW-TI <code>PROTECTVM_LOCAL</code> (event ID 7)</h3>
+  <p>Every <code>NtProtectVirtualMemory</code> call against a region inside <code>ntdll</code> with target protection <code>PAGE_EXECUTE_READWRITE</code> (or <code>PAGE_EXECUTE_WRITECOPY</code>) fires a <code>PROTECTVM_LOCAL</code> event on the Threat-Intelligence ETW provider. Jonathan Johnson published the canonical analysis (June 2024). The event includes: process ID, target base address, region size, old protection, new protection. <em>This is the chokepoint that makes all five unhook families detectable.</em></p>
+
+  <h3>3. <code>SetThreadContext</code> on debug registers</h3>
+  <p>For VEH-based hardware-breakpoint hooks (§ 04), the conventional pattern uses <code>NtSetContextThread</code> to write <code>Dr0</code>–<code>Dr7</code>. This fires events on <code>Microsoft-Windows-Kernel-Audit-API-Calls</code>. CrowdStrike's VEH² research bypasses this specific telemetry, but the bypass itself produces other artifacts &mdash; namely, an exception being raised intentionally inside the process, which is itself trackable via the same audit provider's exception events.</p>
+
+  <h3>4. Call-stack analysis on <code>NtProtectVirtualMemory</code></h3>
+  <p>Even if the protect call is made via a direct syscall to evade user-mode hooks, kernel-side ETW callstack capture (Elastic 8.8+) records the stack. A <code>NtProtectVirtualMemory</code> targeting <code>ntdll</code>'s <code>.text</code> section, called from a stack frame that doesn't end in <code>ntdll</code> or <code>kernelbase</code>, is high-confidence malicious.</p>
+
+  <h3>5. The <code>NtCreateSection(SEC_IMAGE, ntdll.dll)</code> signature</h3>
+  <p>Specific to refresh-from-disk and refresh-from-KnownDLLs unhooking. Re-mapping <code>ntdll.dll</code> as a section image from a non-loader thread is unusual enough that several EDRs alert on it directly. Combined with subsequent <code>NtProtectVirtualMemory</code> on the original <code>ntdll</code>, it's a near-certain unhook attempt.</p>
+
+  <div class="telemetry">
+    <strong>Hunt query template (Defender for Endpoint / KQL-flavored):</strong> for every <code>VirtualProtect</code> event where the target memory region overlaps a known DLL's <code>.text</code> section AND the requested protection includes write permission AND the calling process is not a debugger or installer, alert. False-positive rate is very low in mature environments. Pair with the parent process and module hash for triage.
+  </div>
+
+  <hr class="rule">
+
+  <!-- ========== § 08 ========== -->
+  <div class="deck">
+    <div class="deck-title">§ 08 &nbsp;·&nbsp; the 30-second recall</div>
+    <h2 style="margin-top: 6px;">Flashcards</h2>
+    <p class="deck-sub">Eight questions. If you can answer all without notes, you can read any 2026 EDR-bypass loader and predict its detection signature.</p>
+
+    <div class="card-flip" onclick="this.classList.toggle('open')">
+      <div class="q">In bytes, what does a typical 5-byte inline hook on <code>NtAllocateVirtualMemory</code> look like, and where do the original bytes go?</div>
+      <div class="a">The first 5 bytes of the function (<code>4c 8b d1 b8 18</code>: <code>mov r10, rcx</code> + start of <code>mov eax, 18h</code>) are overwritten with <code>E9 &lt;rel32&gt;</code> &mdash; a 5-byte relative jump to the EDR's analysis routine. The original 5 bytes are preserved in a separate memory region called the trampoline, allocated by the EDR. After the analysis routine inspects the call, it jumps to the trampoline, which executes the original bytes and then jumps back to <code>NtAllocateVirtualMemory + 5</code> to continue normal execution.</div>
+    </div>
+
+    <div class="card-flip" onclick="this.classList.toggle('open')">
+      <div class="q">When would an EDR use a 14-byte absolute jump (FF 25) instead of a 5-byte relative jump?</div>
+      <div class="a">When 5 bytes isn't enough to capture full instructions (the prologue might begin with multi-byte instructions whose boundaries don't align cleanly at 5 bytes), or when the analysis routine lives more than ±2 GiB from the patch site. The 14-byte form (<code>FF 25 00 00 00 00 &lt;qword&gt;</code>) is an absolute indirect jump that reaches anywhere in 64-bit space. The 12-byte alternative (<code>48 B8 &lt;qword&gt; FF E0</code>: <code>mov rax, target; jmp rax</code>) is also seen.</div>
+    </div>
+
+    <div class="card-flip" onclick="this.classList.toggle('open')">
+      <div class="q">Why are IAT hooks not used by EDRs for syscall coverage?</div>
+      <div class="a">IAT hooks only catch calls that go through that specific module's import table. Code that resolves <code>VirtualAlloc</code> via <code>GetProcAddress</code> at runtime, or that calls <code>NtAllocateVirtualMemory</code> directly via syscall, sails through the IAT entirely. EDRs need to catch every caller in the process; placing inline hooks at the source DLL (<code>ntdll</code>) achieves that with one patch site per syscall.</div>
+    </div>
+
+    <div class="card-flip" onclick="this.classList.toggle('open')">
+      <div class="q">Hardware-breakpoint hooks via VEH don't modify any function bytes. What's the IOC instead?</div>
+      <div class="a">Two artifacts: (1) the thread's debug registers (<code>Dr0</code>–<code>Dr7</code>) contain non-zero breakpoint addresses, and (2) the conventional setup uses <code>NtSetContextThread</code> to write those registers, which fires <code>Microsoft-Windows-Kernel-Audit-API-Calls</code> ETW events. CrowdStrike's VEH² (2023) bypasses #2 by modifying the volatile <code>CONTEXT</code> from inside an exception handler, but the registered exception handler itself is also an artifact.</div>
+    </div>
+
+    <div class="card-flip" onclick="this.classList.toggle('open')">
+      <div class="q">Walk through how an EDR DLL gets into a brand-new process &mdash; what fires when?</div>
+      <div class="a">(1) Parent calls <code>CreateProcess</code>. (2) Kernel builds the new EPROCESS. (3) <code>PsSetCreateProcessNotifyRoutineEx</code> callback fires &mdash; the EDR driver receives notification. (4) EDR driver queues a user-mode APC with shellcode that calls <code>LdrLoadDll</code> on the EDR DLL. (5) New process begins at <code>ntdll!LdrInitializeThunk</code>. (6) <code>NtTestAlert</code> drains the APC queue, EDR APC fires. (7) Shellcode calls <code>LdrLoadDll(EDR.dll)</code>. (8) EDR's <code>DllMain</code> calls <code>VirtualProtect</code> + writes hooks. (9) Loader continues, eventually calls <code>main</code> &mdash; with hooks already in place.</div>
+    </div>
+
+    <div class="card-flip" onclick="this.classList.toggle('open')">
+      <div class="q">Perun's Fart spawns a suspended process to harvest a clean <code>ntdll</code>. Why does this work, and when does it fail?</div>
+      <div class="a">It works because <code>ntdll</code> is loaded immediately when a process is created (it's the very first DLL), and there's a measurable window between when <code>ntdll</code> is mapped and when the EDR's user-mode APC fires to install hooks. A suspended child has <code>ntdll</code> in memory but no APCs have run yet. Reading the child's <code>ntdll!.text</code> at this moment yields clean syscall stubs. It fails when the EDR is registered as a kernel-driven hook injector that operates from kernel mode (no user-mode APC race window), or when the EDR's callback runs early enough to hook the child <em>before</em> the parent reads it.</div>
+    </div>
+
+    <div class="card-flip" onclick="this.classList.toggle('open')">
+      <div class="q">An attacker uses a direct syscall to call <code>NtProtectVirtualMemory(ntdll!.text, RWX)</code>, bypassing the user-mode hook. Does this evade detection?</div>
+      <div class="a">No. The user-mode hook is bypassed, but the kernel-side ETW-TI <code>PROTECTVM_LOCAL</code> event fires inside <code>NtProtectVirtualMemory</code>'s kernel implementation, regardless of how the syscall was invoked. The event includes the target base address, requested protection, and source process. An EDR consuming ETW-TI sees the protection change to RWX on <code>ntdll</code>'s <code>.text</code> section &mdash; an extremely high-fidelity IOC. Attempts to bypass this require kernel-level write access (BYOVD, etc.), not user-mode tricks.</div>
+    </div>
+
+    <div class="card-flip" onclick="this.classList.toggle('open')">
+      <div class="q">Why does the README of hwbp/NTDLL-Unhook say "unhooking does literally nothing" against modern EDRs?</div>
+      <div class="a">Because Defender for Endpoint, Elastic Defend, and similar mature EDRs deemphasize user-mode hooks in favor of kernel callbacks (<code>PsSetLoadImageNotifyRoutine</code>, etc.) and ETW-TI. Unhooking removes the user-mode hook bytes &mdash; but those weren't the EDR's primary detection mechanism in the first place. The kernel-side telemetry continues firing identically before and after unhooking. Removing user-mode hooks does help against legacy AV and lighter EDRs that rely heavily on inline hooking, but against the modern tier, it's at best a partial measure that needs to be paired with call-stack spoofing and other techniques.</div>
+    </div>
+  </div>
+
+  <hr class="rule">
+
+  <!-- ========== § 09 ========== -->
+  <h2><span class="num">§ 09</span> Closing thought</h2>
+  <p>Six volumes in. Here's the picture so far:</p>
+  <ul style="font-family: var(--serif); color: var(--ink); padding-left: 24px;">
+    <li style="margin-bottom: 8px;"><strong>Vol. 01</strong> &mdash; the alphabet (data types).</li>
+    <li style="margin-bottom: 8px;"><strong>Vol. 02</strong> &mdash; the static skeleton (PE format).</li>
+    <li style="margin-bottom: 8px;"><strong>Vol. 03</strong> &mdash; the living state (PEB / TEB / LDR).</li>
+    <li style="margin-bottom: 8px;"><strong>Vol. 04</strong> &mdash; the machinery that builds that state (the loader).</li>
+    <li style="margin-bottom: 8px;"><strong>Vol. 05</strong> &mdash; the border crossing (syscalls).</li>
+    <li><strong>Vol. 06</strong> &mdash; how the EDR rewrites bytes near that border, and how attackers undo it.</li>
+  </ul>
+  <p style="margin-top: 24px;">A defining theme of the last two volumes is this: <em>user-mode hooks were the entire EDR detection model in 2018. By 2026, they are a residual layer that catches commodity malware while real telemetry happens in the kernel.</em> Hell's Gate, Halo's Gate, Tartarus' Gate, Perun's Fart, EDR-Preloading, Early Cascade Injection &mdash; brilliant techniques, all of them, and all primarily targeting a defense-in-depth layer that mature EDRs no longer rely on as their core. The honest answer for purple team operators in 2026 is: <em>unhooking gets you past the doormat; the burglar alarm is in the walls</em>.</p>
+  <p>For detection engineers, the inverse: don't build your strategy around hook integrity alone. ETW-TI, kernel callbacks, and call-stack capture are your bedrock. Hook integrity is a confirmation signal, not a primary one.</p>
+  <p>Next: <em class="pen">Vol. 07 &mdash; Process Injection Taxonomy (Part 1)</em>. Now that we have the full primitive set &mdash; PE format, loader, syscalls, hooking &mdash; we compose them into the dozen-or-so injection techniques that have shaped offensive Windows tradecraft for the last decade. Classic <code>VirtualAllocEx + WriteProcessMemory + CreateRemoteThread</code> through to APC injection, process hollowing, doppelg&auml;nging, herpaderping, transacted hollowing, ghosting, and the 2024-era Early Cascade. The framing throughout: which structures are touched, which syscalls fire, which detection chokepoints catch each.</p>
+
+  <footer class="end">
+    <div>filed under &middot; windows internals &middot; hooking &middot; offensive &amp; detection</div>
+    <div class="sig">&mdash; blacksunCUBE</div>
+  </footer>
+
+</div>
+<script src="/assets/js/notebook-guard.js" defer></script>
+</body>
+</html>
