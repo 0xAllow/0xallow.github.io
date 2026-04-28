@@ -586,10 +586,10 @@ description: "A reading of the Windows type system through three verbs: read, wr
 
   <h1>Windows Data Types,<br><em>as they actually behave in memory.</em></h1>
   <p class="dek">A reading of the Windows type system through the only three verbs that matter when you are attacking or defending a process: <strong>read</strong>, <strong>write</strong>, <strong>execute</strong>.</p>
-  <div class="byline">a primer for operators &mdash; <em>not a textbook</em></div>
+  <div class="byline">a primer for operators  <em>not a textbook</em></div>
 
   <!-- ========== OPENING THOUGHT ========== -->
-  <p>Here is the thing that took me too long to admit out loud: nobody is confused by <code>int</code> or <code>char*</code>. What slows people down on Windows is a <em class="pen">cosmetic</em> problem pretending to be a technical one. <code>LPCWSTR</code>, <code>PHANDLE</code>, <code>ULONG_PTR</code> &mdash; these are not new types. They are thirty years of naming conventions layered on top of ordinary C primitives, and once you see through the names, the whole API surface becomes flat and legible.</p>
+  <p>Here is the thing that took me too long to admit out loud: nobody is confused by <code>int</code> or <code>char*</code>. What slows people down on Windows is a <em class="pen">cosmetic</em> problem pretending to be a technical one. <code>LPCWSTR</code>, <code>PHANDLE</code>, <code>ULONG_PTR</code>  these are not new types. They are thirty years of naming conventions layered on top of ordinary C primitives, and once you see through the names, the whole API surface becomes flat and legible.</p>
 
   <p>I want to give you a mental model I wish someone had given me. We will read every type through three axes. Ignore them and the docs look like a wall of noise. Keep them in the back of your head and <code>CreateFileW</code>'s signature reads like an English sentence.</p>
 
@@ -608,11 +608,11 @@ description: "A reading of the Windows type system through three verbs: read, wr
     <div class="legend-item x">
       <span class="tag">X &middot; Execute</span>
       <h4>An identity the kernel will act on</h4>
-      <p>The type refers to a live kernel object or a region of executable memory. Touching it causes <em>the OS to do work</em> &mdash; files opened, threads created, code run.</p>
+      <p>The type refers to a live kernel object or a region of executable memory. Touching it causes <em>the OS to do work</em>  files opened, threads created, code run.</p>
     </div>
   </div>
 
-  <p>Every Windows type on this page gets tagged with one or more of these. Not because Microsoft tags them that way &mdash; they don't &mdash; but because this is how your brain needs to encode them if you want to read disassembly without a dictionary.</p>
+  <p>Every Windows type on this page gets tagged with one or more of these. Not because Microsoft tags them that way  they don't  but because this is how your brain needs to encode them if you want to read disassembly without a dictionary.</p>
 
   <!-- ========== SECTION 1: THE DWORD AND ITS FAMILY ========== -->
   <h2><span class="num">§ 01</span> Integers, or: what a <code>DWORD</code> really is</h2>
@@ -635,7 +635,7 @@ description: "A reading of the Windows type system through three verbs: read, wr
   <div class="twin">
     <div class="take red">
       <h5>&rarr; operator's view</h5>
-      <p>Access-mask DWORDs are where your tooling lives or dies. <code>PROCESS_ALL_ACCESS</code> is <code>0x1FFFFF</code> &mdash; a neon sign for any half-decent EDR. <strong>Request only what you need.</strong> <code>PROCESS_QUERY_LIMITED_INFORMATION</code> (<code>0x1000</code>) is almost free, visible in nobody's high-priority rules.</p>
+      <p>Access-mask DWORDs are where your tooling lives or dies. <code>PROCESS_ALL_ACCESS</code> is <code>0x1FFFFF</code>  a neon sign for any half-decent EDR. <strong>Request only what you need.</strong> <code>PROCESS_QUERY_LIMITED_INFORMATION</code> (<code>0x1000</code>) is almost free, visible in nobody's high-priority rules.</p>
     </div>
     <div class="take blue">
       <h5>&rarr; defender's view</h5>
@@ -688,7 +688,7 @@ pBase = (<span class="t">PVOID</span>)((<span class="t">ULONG_PTR</span>)pBase +
   <div class="callout">
     <div class="label">the rule</div>
     <p style="font-family: var(--sans); font-size: 18px; color: var(--ink);">If a type name starts with <code style="font-size: 16px;">P</code>, it is a <strong>pointer to</strong> the type without the <code style="font-size: 16px;">P</code>.</p>
-    <p style="font-family: var(--serif); font-style: italic; color: var(--ink-dim); font-size: 15px; margin-top: 10px;">That is the entire rule. <code>PHANDLE</code> is <code>HANDLE*</code>. <code>PDWORD</code> is <code>DWORD*</code>. <code>PSIZE_T</code> is <code>SIZE_T*</code>. An <code>LP</code> prefix means the same thing &mdash; "long pointer" &mdash; a leftover from 16-bit segmented memory that no longer means anything on x86/x64.</p>
+    <p style="font-family: var(--serif); font-style: italic; color: var(--ink-dim); font-size: 15px; margin-top: 10px;">That is the entire rule. <code>PHANDLE</code> is <code>HANDLE*</code>. <code>PDWORD</code> is <code>DWORD*</code>. <code>PSIZE_T</code> is <code>SIZE_T*</code>. An <code>LP</code> prefix means the same thing  "long pointer"  a leftover from 16-bit segmented memory that no longer means anything on x86/x64.</p>
   </div>
 
   <p>Which means that whenever you see a <code>P</code>-type in a function signature, you are looking at either an input-by-reference or an <span class="hl-w">out-parameter</span>. The function will either read through that pointer or <em>write through it</em>. That is not a stylistic detail; it is the difference between a parameter you initialize and one you just declare.</p>
@@ -735,7 +735,7 @@ pBase = (<span class="t">PVOID</span>)((<span class="t">ULONG_PTR</span>)pBase +
         <div class="val" style="color: var(--exec);">EPROCESS &nbsp;(lsass.exe)</div>
       </div>
     </div>
-    <p style="font-family: var(--serif); font-style: italic; color: var(--ink-dim); font-size: 14px; margin-top: 16px; margin-bottom: 0;">The handle value you hold in user mode is an index into your process's private handle table. The kernel dereferences it on every call. A <code>HANDLE</code> value of <code>0x2AC</code> in one process is meaningless &mdash; or refers to something completely different &mdash; in another.</p>
+    <p style="font-family: var(--serif); font-style: italic; color: var(--ink-dim); font-size: 14px; margin-top: 16px; margin-bottom: 0;">The handle value you hold in user mode is an index into your process's private handle table. The kernel dereferences it on every call. A <code>HANDLE</code> value of <code>0x2AC</code> in one process is meaningless  or refers to something completely different  in another.</p>
   </div>
 
   <div class="card exec">
@@ -777,17 +777,17 @@ pBase = (<span class="t">PVOID</span>)((<span class="t">ULONG_PTR</span>)pBase +
 <span class="c">// hNtdll *is* the base of ntdll.dll. You can cast it and walk the PE headers.</span>
 <span class="t">PIMAGE_DOS_HEADER</span> pDos = (<span class="t">PIMAGE_DOS_HEADER</span>)hNtdll;
 <span class="t">PIMAGE_NT_HEADERS</span> pNt = (<span class="t">PIMAGE_NT_HEADERS</span>)((<span class="t">ULONG_PTR</span>)hNtdll + pDos-&gt;e_lfanew);</pre>
-    <p>This is the seam that every "resolve APIs by hash" technique exploits. The PEB lets you walk the list of loaded modules without calling any Windows API at all &mdash; you get the <code>HMODULE</code> (i.e. base address) of <code>ntdll.dll</code>, then you parse its export table in memory and find <code>NtAllocateVirtualMemory</code> by hashing its name. No <code>GetProcAddress</code>. No import table entry for sensitive functions. That whole family of tradecraft starts with understanding that <code>HMODULE == base address</code>.</p>
+    <p>This is the seam that every "resolve APIs by hash" technique exploits. The PEB lets you walk the list of loaded modules without calling any Windows API at all  you get the <code>HMODULE</code> (i.e. base address) of <code>ntdll.dll</code>, then you parse its export table in memory and find <code>NtAllocateVirtualMemory</code> by hashing its name. No <code>GetProcAddress</code>. No import table entry for sensitive functions. That whole family of tradecraft starts with understanding that <code>HMODULE == base address</code>.</p>
   </div>
 
   <div class="twin">
     <div class="take red">
       <h5>&rarr; operator's view</h5>
-      <p>API hashing (ROR13, FNV-1a, DJB2) only works because <code>HMODULE</code> is a real pointer you can parse. The trade-off is that your stub now has to walk PE headers at runtime, which creates its own thumbprint &mdash; a loop reading from <code>ntdll</code>'s export directory looks different from a normal import resolution.</p>
+      <p>API hashing (ROR13, FNV-1a, DJB2) only works because <code>HMODULE</code> is a real pointer you can parse. The trade-off is that your stub now has to walk PE headers at runtime, which creates its own thumbprint  a loop reading from <code>ntdll</code>'s export directory looks different from a normal import resolution.</p>
     </div>
     <div class="take blue">
       <h5>&rarr; defender's view</h5>
-      <p>Processes that call <code>NtAllocateVirtualMemory</code> but have <strong>no IAT entry</strong> for it &mdash; and no matching <code>LoadLibrary</code> / <code>GetProcAddress</code> in their call history &mdash; are the signature. ETW's <code>Microsoft-Windows-Threat-Intelligence</code> provider (kernel-side, Protected-Process-only consumers) surfaces this cleanly.</p>
+      <p>Processes that call <code>NtAllocateVirtualMemory</code> but have <strong>no IAT entry</strong> for it  and no matching <code>LoadLibrary</code> / <code>GetProcAddress</code> in their call history  are the signature. ETW's <code>Microsoft-Windows-Threat-Intelligence</code> provider (kernel-side, Protected-Process-only consumers) surfaces this cleanly.</p>
     </div>
   </div>
 
@@ -804,7 +804,7 @@ pBase = (<span class="t">PVOID</span>)((<span class="t">ULONG_PTR</span>)pBase +
 <span class="t">NTSTATUS</span> st = <span class="fn">NtOpenProcess</span>(<span class="m">&amp;hProc</span>,  <span class="c">// &lt;-- PHANDLE: kernel writes here</span>
                             PROCESS_QUERY_INFORMATION,
                             &amp;oa, &amp;cid);</pre>
-    <p>Every time you see <code>PHANDLE</code>, you are passing the address of your local variable so the kernel can deposit a new handle there. <strong>Write-axis, no question.</strong> Don't initialize the variable &mdash; it doesn't matter, the callee overwrites it.</p>
+    <p>Every time you see <code>PHANDLE</code>, you are passing the address of your local variable so the kernel can deposit a new handle there. <strong>Write-axis, no question.</strong> Don't initialize the variable  it doesn't matter, the callee overwrites it.</p>
   </div>
 
   <hr class="rule">
@@ -838,7 +838,7 @@ pBase = (<span class="t">PVOID</span>)((<span class="t">ULONG_PTR</span>)pBase +
   <p>Now here is the thing that is genuinely important, and that nobody tells beginners: <strong><em class="pen">the "A" functions are a polite fiction.</em></strong> Inside every <code>CreateFileA</code> call, the function converts your ANSI string to UTF-16 using the current code page, then calls <code>CreateFileW</code>. Everything below <code>kernelbase.dll</code> is Unicode. The kernel does not speak ANSI. It never has.</p>
 
   <div class="margin">
-    This is why the <code>UNICODE_STRING</code> structure &mdash; a length-prefixed UTF-16 buffer &mdash; shows up everywhere in the PEB, the TEB, the LDR, and the object manager. When you are writing direct syscalls, there is no "A" option. There is only <code>wchar_t</code>.
+    This is why the <code>UNICODE_STRING</code> structure  a length-prefixed UTF-16 buffer  shows up everywhere in the PEB, the TEB, the LDR, and the object manager. When you are writing direct syscalls, there is no "A" option. There is only <code>wchar_t</code>.
   </div>
 
   <h3>Byte counts: the off-by-one that ships in production</h3>
@@ -856,7 +856,7 @@ pBase = (<span class="t">PVOID</span>)((<span class="t">ULONG_PTR</span>)pBase +
     </div>
     <div class="take blue">
       <h5>&rarr; defender's view</h5>
-      <p>Command-line telemetry (Sysmon 1, Security 4688 with command-line logging) arrives as UTF-16. File-path ETW (<code>Microsoft-Windows-Kernel-File</code>) arrives as UTF-16. Write your regexes and KQL against UTF-16 semantics, not ASCII. Watch for <code>\??\</code> and <code>\\?\</code> prefixes &mdash; they bypass <code>MAX_PATH</code> and some user-mode sanitizers.</p>
+      <p>Command-line telemetry (Sysmon 1, Security 4688 with command-line logging) arrives as UTF-16. File-path ETW (<code>Microsoft-Windows-Kernel-File</code>) arrives as UTF-16. Write your regexes and KQL against UTF-16 semantics, not ASCII. Watch for <code>\??\</code> and <code>\\?\</code> prefixes  they bypass <code>MAX_PATH</code> and some user-mode sanitizers.</p>
     </div>
   </div>
 
@@ -878,7 +878,7 @@ pBase = (<span class="t">PVOID</span>)((<span class="t">ULONG_PTR</span>)pBase +
     [<span class="k">in</span>, <span class="k">optional</span>] <span class="t">HANDLE</span>                hTemplateFile
 );</pre>
 
-  <p>The bracketed words are <strong>SAL</strong> (Source-code Annotation Language). They are purely documentation &mdash; stripping them does not change a single byte of compiled code. But they tell you at a glance which arguments are <span class="hl-r">inputs</span>, which are <span class="hl-w">outputs</span>, and which you may pass <code>NULL</code>. That is a lot of information for seven characters.</p>
+  <p>The bracketed words are <strong>SAL</strong> (Source-code Annotation Language). They are purely documentation  stripping them does not change a single byte of compiled code. But they tell you at a glance which arguments are <span class="hl-r">inputs</span>, which are <span class="hl-w">outputs</span>, and which you may pass <code>NULL</code>. That is a lot of information for seven characters.</p>
 
   <p>Read the signature above and you now know: <code>CreateFileW</code> takes seven inputs and writes back nothing through its parameters. The only way it communicates success is through its <code>HANDLE</code> return value. If you wanted data back via a pointer, you would see <code>[out]</code> somewhere, which you do not. <em>That is an entire paragraph of understanding from ten seconds of reading.</em></p>
 
@@ -919,14 +919,14 @@ pBase = (<span class="t">PVOID</span>)((<span class="t">ULONG_PTR</span>)pBase +
 
   <div class="callout">
     <div class="label">why this matters for direct syscalls</div>
-    <p>When you bypass <code>kernel32</code> / <code>kernelbase</code> and invoke <code>Nt*</code> through your own syscall stubs &mdash; Hell's Gate, Halo's Gate, Tartarus Gate, SysWhispers, Freshy-Calls, whatever your flavor &mdash; <code>GetLastError</code> is <strong>meaningless</strong>. The Win32-to-NTSTATUS translation only happens inside the wrapper functions in <code>kernelbase.dll</code>. At the syscall boundary, all you have is whatever is sitting in <code>RAX</code> when <code>syscall</code> returns. Read the <code>NTSTATUS</code>. It is all you get.</p>
+    <p>When you bypass <code>kernel32</code> / <code>kernelbase</code> and invoke <code>Nt*</code> through your own syscall stubs  Hell's Gate, Halo's Gate, Tartarus Gate, SysWhispers, Freshy-Calls, whatever your flavor  <code>GetLastError</code> is <strong>meaningless</strong>. The Win32-to-NTSTATUS translation only happens inside the wrapper functions in <code>kernelbase.dll</code>. At the syscall boundary, all you have is whatever is sitting in <code>RAX</code> when <code>syscall</code> returns. Read the <code>NTSTATUS</code>. It is all you get.</p>
   </div>
 
   <hr class="rule">
 
   <!-- ========== SECTION 7: RECAP ========== -->
   <h2><span class="num">§ 07</span> Putting it together</h2>
-  <p class="sub">Read this table the way you would read chord shapes &mdash; memorize once, then you know the whole song.</p>
+  <p class="sub">Read this table the way you would read chord shapes  memorize once, then you know the whole song.</p>
 
   <table>
     <thead>
@@ -959,7 +959,7 @@ pBase = (<span class="t">PVOID</span>)((<span class="t">ULONG_PTR</span>)pBase +
   <!-- ========== END ========== -->
   <footer class="end">
     <div>filed under &middot; windows internals &middot; offensive tooling &middot; detection</div>
-    <div class="sig">&mdash; blacksunCUBE</div>
+    <div class="sig"> blacksunCUBE</div>
           </footer>
     </div>
 <script src="/assets/js/notebook-guard.js" defer></script>
