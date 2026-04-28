@@ -679,17 +679,17 @@ description: "How a DLL actually gets into your address space — from LoadLibra
   </header>
 
   <h1>The Windows Loader,<br><em>or: how a DLL actually shows up in your address space.</em></h1>
-  <p class="dek">A walk through the code path from <code>LoadLibrary</code> to <code>DllMain</code> &mdash; and the four families of attack and detection that exist nowhere else but inside that path.</p>
+  <p class="dek">A walk through the code path from <code>LoadLibrary</code> to <code>DllMain</code>  and the four families of attack and detection that exist nowhere else but inside that path.</p>
   <div class="byline">blacksun<span style="color:var(--exec);">CUBE</span> field notebook &middot; vol. 04 &middot; <em>builds on vol. 02 (PE) &amp; vol. 03 (PEB/Ldr)</em></div>
 
-  <p>Vol. 03 ended with the loader's data structures: the <code>PEB.Ldr</code> list, each entry pointing to a loaded module's base. We treated those as static facts &mdash; <em>here is the list, here are the bases</em>. Now we ask the question that matters for offense and defense: <strong>how does an entry actually <em>get</em> into that list?</strong></p>
+  <p>Vol. 03 ended with the loader's data structures: the <code>PEB.Ldr</code> list, each entry pointing to a loaded module's base. We treated those as static facts  <em>here is the list, here are the bases</em>. Now we ask the question that matters for offense and defense: <strong>how does an entry actually <em>get</em> into that list?</strong></p>
 
   <p>The answer is a code path inside <code>ntdll.dll</code> that is almost entirely undocumented, has been reverse-engineered at length by the security industry, and is the single most monitored region of code in any process running an EDR. Three things live in this path that exist nowhere else:</p>
 
   <ol style="font-family: var(--serif); color: var(--ink); padding-left: 24px;">
-    <li style="margin-bottom: 10px;"><strong>The first arbitrary code execution opportunity</strong> &mdash; <code>DllMain</code> runs before any other code in a freshly-loaded DLL.</li>
-    <li style="margin-bottom: 10px;"><strong>The DLL search order</strong> &mdash; the algorithm that decides <em>which</em> DLL on disk satisfies a name, which is the entire foundation of DLL hijacking.</li>
-    <li><strong>Loader lock</strong> &mdash; a process-wide critical section that enforces serialization on every load, and which is the source of more deadlocks and EDR detection signals than any other primitive in user mode.</li>
+    <li style="margin-bottom: 10px;"><strong>The first arbitrary code execution opportunity</strong>  <code>DllMain</code> runs before any other code in a freshly-loaded DLL.</li>
+    <li style="margin-bottom: 10px;"><strong>The DLL search order</strong>  the algorithm that decides <em>which</em> DLL on disk satisfies a name, which is the entire foundation of DLL hijacking.</li>
+    <li><strong>Loader lock</strong>  a process-wide critical section that enforces serialization on every load, and which is the source of more deadlocks and EDR detection signals than any other primitive in user mode.</li>
   </ol>
 
   <p>Same axes you know:</p>
@@ -718,12 +718,12 @@ description: "How a DLL actually gets into your address space — from LoadLibra
   <h2><span class="num">§ 01</span> Why a loader exists at all</h2>
   <p class="sub">A naive picture of program startup, and what's missing from it.</p>
 
-  <p>Imagine you compile a small C program that calls <code>MessageBoxW</code>. The naive mental model is: the OS reads your <code>.exe</code>, copies it into memory, jumps to <code>main</code>, and you're running. That picture is wrong in one critical way: <code>MessageBoxW</code> doesn't live in your <code>.exe</code>. It lives in <code>user32.dll</code>. When your code says <code>call MessageBoxW</code>, the CPU needs an address to jump to &mdash; and that address depends on where <code>user32.dll</code> ended up in <em>your</em> process's virtual memory, which is decided at runtime by ASLR.</p>
+  <p>Imagine you compile a small C program that calls <code>MessageBoxW</code>. The naive mental model is: the OS reads your <code>.exe</code>, copies it into memory, jumps to <code>main</code>, and you're running. That picture is wrong in one critical way: <code>MessageBoxW</code> doesn't live in your <code>.exe</code>. It lives in <code>user32.dll</code>. When your code says <code>call MessageBoxW</code>, the CPU needs an address to jump to  and that address depends on where <code>user32.dll</code> ended up in <em>your</em> process's virtual memory, which is decided at runtime by ASLR.</p>
 
-  <p>So before <code>main</code> can run, somebody has to: find <code>user32.dll</code> on disk, map it into memory, walk its export table to find <code>MessageBoxW</code>, write that address into your IAT (vol. 02), and only then jump to <code>main</code>. That somebody is the <strong>loader</strong>. It lives in <code>ntdll.dll</code>. It runs before any of your code. And it doesn't stop after <code>main</code> &mdash; every <code>LoadLibrary</code> call you make later goes through the same machinery.</p>
+  <p>So before <code>main</code> can run, somebody has to: find <code>user32.dll</code> on disk, map it into memory, walk its export table to find <code>MessageBoxW</code>, write that address into your IAT (vol. 02), and only then jump to <code>main</code>. That somebody is the <strong>loader</strong>. It lives in <code>ntdll.dll</code>. It runs before any of your code. And it doesn't stop after <code>main</code>  every <code>LoadLibrary</code> call you make later goes through the same machinery.</p>
 
   <div class="margin">
-    The loader is the closest thing the OS has to a runtime that runs <em>inside</em> your process. It's not a service, not a daemon &mdash; it's a chunk of code in <code>ntdll.dll</code> that the kernel hands the first execution to. Everything you call, including <code>main</code>, runs after the loader has already done its job. If you've ever wondered why a debugger that breaks on the EXE entry point already shows several DLLs loaded &mdash; this is why.
+    The loader is the closest thing the OS has to a runtime that runs <em>inside</em> your process. It's not a service, not a daemon  it's a chunk of code in <code>ntdll.dll</code> that the kernel hands the first execution to. Everything you call, including <code>main</code>, runs after the loader has already done its job. If you've ever wondered why a debugger that breaks on the EXE entry point already shows several DLLs loaded  this is why.
   </div>
 
   <hr class="rule">
@@ -732,7 +732,7 @@ description: "How a DLL actually gets into your address space — from LoadLibra
   <h2><span class="num">§ 02</span> Process startup: <code>LdrInitializeThunk</code></h2>
   <p class="sub">The kernel's handoff to user mode lands here, not at your entry point.</p>
 
-  <p>When the kernel finishes setting up a new process &mdash; allocating the address space, mapping the EXE, creating the initial thread &mdash; it does <em>not</em> jump to your <code>main</code>. It jumps to a function inside <code>ntdll.dll</code> called <code>LdrInitializeThunk</code>. That function is the entry point of every process on Windows.</p>
+  <p>When the kernel finishes setting up a new process  allocating the address space, mapping the EXE, creating the initial thread  it does <em>not</em> jump to your <code>main</code>. It jumps to a function inside <code>ntdll.dll</code> called <code>LdrInitializeThunk</code>. That function is the entry point of every process on Windows.</p>
 
   <p>What follows is the canonical process-startup call chain. This is the call stack you'll see if you set a debugger breakpoint on the very first instruction of any program:</p>
 
@@ -780,13 +780,13 @@ description: "How a DLL actually gets into your address space — from LoadLibra
     </div>
   </div>
 
-  <p>Notice the structure: all the frames in <span style="color:var(--read);"><code>ntdll</code></span> with names starting <code>Ldrp*</code> are internal loader work. The single frame that <em>leaves</em> ntdll &mdash; <code>LdrpCallInitRoutine</code> calling someone else's <code>DllMain</code> &mdash; is the moment when the loader briefly hands control to code it doesn't trust. That single transition is the most important boundary in the entire loader.</p>
+  <p>Notice the structure: all the frames in <span style="color:var(--read);"><code>ntdll</code></span> with names starting <code>Ldrp*</code> are internal loader work. The single frame that <em>leaves</em> ntdll  <code>LdrpCallInitRoutine</code> calling someone else's <code>DllMain</code>  is the moment when the loader briefly hands control to code it doesn't trust. That single transition is the most important boundary in the entire loader.</p>
 
   <div class="telemetry">
-    <strong>Signal for defenders:</strong> <code>LdrpCallInitRoutine</code> is exactly where EDR kernel callbacks fire for image-load notifications. Specifically, <code>PsSetLoadImageNotifyRoutine</code> dispatches to registered drivers <em>before</em> <code>DllMain</code> runs &mdash; this is a callout from the kernel-side image-mapping machinery, not from <code>ntdll</code>. The driver receives the new image's base, size, full path, and process context, and can examine, log, or block. For purple team work, this callback chain is your visibility into every DLL load in every process on the system, including ones that bypass user-mode hooks.
+    <strong>Signal for defenders:</strong> <code>LdrpCallInitRoutine</code> is exactly where EDR kernel callbacks fire for image-load notifications. Specifically, <code>PsSetLoadImageNotifyRoutine</code> dispatches to registered drivers <em>before</em> <code>DllMain</code> runs  this is a callout from the kernel-side image-mapping machinery, not from <code>ntdll</code>. The driver receives the new image's base, size, full path, and process context, and can examine, log, or block. For purple team work, this callback chain is your visibility into every DLL load in every process on the system, including ones that bypass user-mode hooks.
   </div>
 
-  <p>The same call chain runs for dynamic loads &mdash; the only difference is the entry point at the top:</p>
+  <p>The same call chain runs for dynamic loads  the only difference is the entry point at the top:</p>
 
   <div class="callstack">
     <div class="caption">dynamic load &middot; <code style="color:var(--ink-faint);">LoadLibrary("foo.dll")</code></div>
@@ -832,7 +832,7 @@ description: "How a DLL actually gets into your address space — from LoadLibra
     </div>
   </div>
 
-  <p>Both paths converge on <code>LdrpCallInitRoutine</code>. Whether the DLL is loaded statically (in the IAT, resolved during process init) or dynamically (via an explicit <code>LoadLibrary</code> at runtime), the moment of foreign-code execution is the same single function call. <em>This is why every EDR kernel-callback chain anchors at image load &mdash; one watchpoint covers both.</em></p>
+  <p>Both paths converge on <code>LdrpCallInitRoutine</code>. Whether the DLL is loaded statically (in the IAT, resolved during process init) or dynamically (via an explicit <code>LoadLibrary</code> at runtime), the moment of foreign-code execution is the same single function call. <em>This is why every EDR kernel-callback chain anchors at image load  one watchpoint covers both.</em></p>
 
   <hr class="rule">
 
@@ -858,8 +858,8 @@ description: "How a DLL actually gets into your address space — from LoadLibra
 
   <ul style="font-family: var(--serif); color: var(--ink); padding-left: 24px;">
     <li style="margin-bottom: 10px;"><strong>The name comes in as a <code>UNICODE_STRING</code>.</strong> Vol. 01 introduced this type; here you see why it matters. The Win32 wrappers (<code>LoadLibraryA</code>, <code>LoadLibraryW</code>) take a plain <code>LPCWSTR</code>, then call <code>RtlInitUnicodeString</code> internally to wrap it before invoking <code>LdrLoadDll</code>. The kernel and the loader speak <code>UNICODE_STRING</code> exclusively.</li>
-    <li style="margin-bottom: 10px;"><strong>It returns an <code>HMODULE</code> by out-pointer.</strong> Same as <code>LoadLibrary</code>'s return value. Same as the entry's <code>DllBase</code> in the LDR list. They are all the same value &mdash; the DLL's load address in your process &mdash; just typed differently.</li>
-    <li><strong>It takes an optional <code>SearchPath</code>.</strong> If <code>NULL</code>, the loader uses the standard search order (next section). If non-null, it overrides &mdash; which is useful for legitimate apps that want to control where their dependencies come from, and the same primitive is used by <code>LoadLibraryEx</code>'s <code>LOAD_LIBRARY_SEARCH_*</code> flags.</li>
+    <li style="margin-bottom: 10px;"><strong>It returns an <code>HMODULE</code> by out-pointer.</strong> Same as <code>LoadLibrary</code>'s return value. Same as the entry's <code>DllBase</code> in the LDR list. They are all the same value  the DLL's load address in your process  just typed differently.</li>
+    <li><strong>It takes an optional <code>SearchPath</code>.</strong> If <code>NULL</code>, the loader uses the standard search order (next section). If non-null, it overrides  which is useful for legitimate apps that want to control where their dependencies come from, and the same primitive is used by <code>LoadLibraryEx</code>'s <code>LOAD_LIBRARY_SEARCH_*</code> flags.</li>
   </ul>
 
   <p>Internally, after acquiring loader lock, <code>LdrLoadDll</code> does roughly this:</p>
@@ -876,7 +876,7 @@ description: "How a DLL actually gets into your address space — from LoadLibra
 <span class="n">8.</span>  <span class="fn">LdrpCallInitRoutine</span>(DllMain, DLL_PROCESS_ATTACH)  <span class="c">// finally — DllMain</span>
 <span class="n">9.</span>  <span class="k">return</span> ModuleHandle = DllBase</pre>
 
-  <p>Steps 3, 4, 5 are pure mechanical work &mdash; map the file, fix up pointers. Step 6 is when the new DLL becomes <em>visible</em> to the rest of the process via the LDR list. Step 7 is the first foreign-code execution (TLS callbacks). Step 8 is the second (<code>DllMain</code>). Steps 7 and 8 both run <em>under loader lock</em>, which is why the lock matters so much &mdash; we'll come back to that.</p>
+  <p>Steps 3, 4, 5 are pure mechanical work  map the file, fix up pointers. Step 6 is when the new DLL becomes <em>visible</em> to the rest of the process via the LDR list. Step 7 is the first foreign-code execution (TLS callbacks). Step 8 is the second (<code>DllMain</code>). Steps 7 and 8 both run <em>under loader lock</em>, which is why the lock matters so much  we'll come back to that.</p>
 
   <hr class="rule">
 
@@ -884,7 +884,7 @@ description: "How a DLL actually gets into your address space — from LoadLibra
   <h2><span class="num">§ 04</span> The DLL search order: where step 2 looks</h2>
   <p class="sub">An algorithm with security implications hiding in every directory entry.</p>
 
-  <p>When you call <code>LoadLibrary("foo.dll")</code> &mdash; with just the bare name, no full path &mdash; the loader has to decide <em>which</em> <code>foo.dll</code> on disk you meant. Multiple copies of the same DLL routinely exist in different places. The algorithm that picks one is the <strong>DLL search order</strong>, and getting between the loader and the DLL it's looking for is the foundation of an entire attack class.</p>
+  <p>When you call <code>LoadLibrary("foo.dll")</code>  with just the bare name, no full path  the loader has to decide <em>which</em> <code>foo.dll</code> on disk you meant. Multiple copies of the same DLL routinely exist in different places. The algorithm that picks one is the <strong>DLL search order</strong>, and getting between the loader and the DLL it's looking for is the foundation of an entire attack class.</p>
 
   <p>The search runs from top to bottom and stops at the first match. With <strong>SafeDllSearchMode enabled</strong> (the default since Windows XP SP2), the order is:</p>
 
@@ -908,7 +908,7 @@ description: "How a DLL actually gets into your address space — from LoadLibra
     <div class="rung dangerous">
       <div class="step">0d</div>
       <div class="what">KnownDLLs section</div>
-      <div class="why">protected core DLLs &mdash; bypasses everything below</div>
+      <div class="why">protected core DLLs  bypasses everything below</div>
     </div>
     <div class="rung">
       <div class="step">1</div>
@@ -938,7 +938,7 @@ description: "How a DLL actually gets into your address space — from LoadLibra
     <div class="rung">
       <div class="step">6</div>
       <div class="what">Directories in <code>PATH</code></div>
-      <div class="why">last resort &mdash; user-controlled, frequently abused</div>
+      <div class="why">last resort  user-controlled, frequently abused</div>
     </div>
   </div>
 
@@ -949,16 +949,16 @@ description: "How a DLL actually gets into your address space — from LoadLibra
   <table>
     <tr>
       <td>HKLM\System\CCS\Control\<br>Session Manager\<br>SafeDllSearchMode</td>
-      <td>If <code>1</code> (default), CWD is at position 5 in the order &mdash; after the system directories. If <code>0</code>, CWD moves to position 2, and an attacker who controls the working directory of any LoadLibrary-calling process can trivially substitute system DLLs. <em>Defenders should ensure this stays <code>1</code></em> &mdash; modern Windows enforces it but legacy and CIS-compliant environments verify explicitly.</td>
+      <td>If <code>1</code> (default), CWD is at position 5 in the order  after the system directories. If <code>0</code>, CWD moves to position 2, and an attacker who controls the working directory of any LoadLibrary-calling process can trivially substitute system DLLs. <em>Defenders should ensure this stays <code>1</code></em>  modern Windows enforces it but legacy and CIS-compliant environments verify explicitly.</td>
     </tr>
     <tr>
       <td>HKLM\System\CCS\Control\<br>Session Manager\<br>KnownDLLs</td>
-      <td>A list of DLL names. Any DLL in this list is loaded from a <em>preinitialized section object</em> the kernel set up at boot &mdash; not from disk at all. Bypasses the entire search order. <code>kernel32.dll</code>, <code>user32.dll</code>, <code>advapi32.dll</code>, <code>ntdll.dll</code>, and dozens more are KnownDLLs by default. <em>This is what makes most "DLL hijacking" of core system DLLs impossible.</em></td>
+      <td>A list of DLL names. Any DLL in this list is loaded from a <em>preinitialized section object</em> the kernel set up at boot  not from disk at all. Bypasses the entire search order. <code>kernel32.dll</code>, <code>user32.dll</code>, <code>advapi32.dll</code>, <code>ntdll.dll</code>, and dozens more are KnownDLLs by default. <em>This is what makes most "DLL hijacking" of core system DLLs impossible.</em></td>
     </tr>
   </table>
 
   <div class="margin">
-    KnownDLLs is the reason you can't just drop a malicious <code>kernel32.dll</code> next to <code>notepad.exe</code> and have it loaded. The kernel mapped the real <code>kernel32.dll</code> as a section at boot &mdash; every process gets that section mapped in, and the loader hits the "already loaded" check before it ever consults the search order. To attack a KnownDLL you need either kernel-level write to the registry list (admin + reboot) or to find a DLL <em>not</em> in the KnownDLLs list that a target process loads with the unsafe order &mdash; which brings us to the next section.
+    KnownDLLs is the reason you can't just drop a malicious <code>kernel32.dll</code> next to <code>notepad.exe</code> and have it loaded. The kernel mapped the real <code>kernel32.dll</code> as a section at boot  every process gets that section mapped in, and the loader hits the "already loaded" check before it ever consults the search order. To attack a KnownDLL you need either kernel-level write to the registry list (admin + reboot) or to find a DLL <em>not</em> in the KnownDLLs list that a target process loads with the unsafe order  which brings us to the next section.
   </div>
 
   <hr class="rule">
@@ -973,13 +973,13 @@ description: "How a DLL actually gets into your address space — from LoadLibra
 
   <ul style="font-family: var(--serif); color: var(--ink); padding-left: 24px;">
     <li style="margin-bottom: 10px;"><strong>Held throughout <code>DllMain</code>.</strong> When your <code>DllMain</code> runs with <code>DLL_PROCESS_ATTACH</code> or <code>DLL_THREAD_ATTACH</code>, the loader lock is held by your thread. Microsoft's official documentation lists what you can and cannot do in <code>DllMain</code> precisely because of this lock. The forbidden list is long: don't call into <code>user32</code>, <code>shell32</code>, <code>ole32</code>; don't <code>WaitForSingleObject</code> on a non-loader-related event; don't create threads and wait for them.</li>
-    <li style="margin-bottom: 10px;"><strong>Re-entrant on the same thread.</strong> Calling <code>LoadLibrary</code> from inside <code>DllMain</code> is technically legal &mdash; the lock is recursive, so the same thread can re-acquire it. The new DLL gets loaded, its <code>DllMain</code> runs, and we recurse. NetSPI's "Adaptive DLL Hijacking" research builds on exactly this property.</li>
-    <li><strong>Cross-thread waits inside <code>DllMain</code> deadlock.</strong> If thread A is in <code>DllMain</code> (holding the lock) and waits on a thread B that itself tries to <code>LoadLibrary</code>, thread B blocks on the lock, A blocks on B, deadlock. This is the <em>classic</em> "DllMain best practices" failure mode &mdash; and a remarkable fraction of "process hangs at startup" bugs in production are exactly this.</li>
+    <li style="margin-bottom: 10px;"><strong>Re-entrant on the same thread.</strong> Calling <code>LoadLibrary</code> from inside <code>DllMain</code> is technically legal  the lock is recursive, so the same thread can re-acquire it. The new DLL gets loaded, its <code>DllMain</code> runs, and we recurse. NetSPI's "Adaptive DLL Hijacking" research builds on exactly this property.</li>
+    <li><strong>Cross-thread waits inside <code>DllMain</code> deadlock.</strong> If thread A is in <code>DllMain</code> (holding the lock) and waits on a thread B that itself tries to <code>LoadLibrary</code>, thread B blocks on the lock, A blocks on B, deadlock. This is the <em>classic</em> "DllMain best practices" failure mode  and a remarkable fraction of "process hangs at startup" bugs in production are exactly this.</li>
   </ul>
 
   <div class="callout">
     <div class="label">why offensive code does the bare minimum in DllMain</div>
-    <p>An attacker who hijacks a DLL load gets <code>DllMain</code> execution &mdash; but under loader lock. The defensive guidance Microsoft publishes ("avoid these calls in DllMain") becomes <em>offensive</em> guidance: do as little as possible, don't load anything, don't wait on anything, and definitely don't try to reach the network. Spawn a thread (<code>CreateThread</code> is one of the few safe calls), have <em>that</em> thread do the real work, and return TRUE immediately. Every mature offensive framework knows this rule cold.</p>
+    <p>An attacker who hijacks a DLL load gets <code>DllMain</code> execution  but under loader lock. The defensive guidance Microsoft publishes ("avoid these calls in DllMain") becomes <em>offensive</em> guidance: do as little as possible, don't load anything, don't wait on anything, and definitely don't try to reach the network. Spawn a thread (<code>CreateThread</code> is one of the few safe calls), have <em>that</em> thread do the real work, and return TRUE immediately. Every mature offensive framework knows this rule cold.</p>
   </div>
 
   <p>You can inspect loader lock in WinDbg:</p>
@@ -1009,7 +1009,7 @@ ntdll!_PEB
   <div class="twin">
     <div class="take blue">
       <h5>1 &middot; image load kernel callback</h5>
-      <p><code>PsSetLoadImageNotifyRoutine</code> registered by EDR drivers fires for <em>every</em> image mapping in <em>every</em> process system-wide. Receives image base, size, full file path, process ID, and a flag indicating whether it's the main EXE or a DLL. <strong>This is the foundational EDR primitive</strong> &mdash; bypassing it requires kernel exploitation or the EDR's driver to be unloaded. Cannot be evaded from user mode.</p>
+      <p><code>PsSetLoadImageNotifyRoutine</code> registered by EDR drivers fires for <em>every</em> image mapping in <em>every</em> process system-wide. Receives image base, size, full file path, process ID, and a flag indicating whether it's the main EXE or a DLL. <strong>This is the foundational EDR primitive</strong>  bypassing it requires kernel exploitation or the EDR's driver to be unloaded. Cannot be evaded from user mode.</p>
     </div>
     <div class="take blue">
       <h5>2 &middot; Sysmon Event 7 / Event ID 4688</h5>
@@ -1043,13 +1043,13 @@ ntdll!_PEB
   <p>Target a DLL that an application <em>tries</em> to load but which doesn't exist on the system. Because the loader gets a "file not found" and falls through, attackers can plant their DLL in a writable location and satisfy the load. The Unit 42 article on <code>msdtc.exe</code> loading a nonexistent <code>oci.dll</code> is the canonical case study. Detection: unsigned DLL appearing where there was previously a load failure for the same name.</p>
 
   <h3>4. KnownDLLs override (admin-only)</h3>
-  <p>Modify the <code>HKLM\System\CCS\Control\Session Manager\KnownDLLs</code> registry list to remove a critical DLL, then plant your version. Requires admin <em>and</em> a reboot for changes to take effect (KnownDLLs sections are built at boot). High-impact but high-noise &mdash; registry modifications to that key are textbook hunt targets.</p>
+  <p>Modify the <code>HKLM\System\CCS\Control\Session Manager\KnownDLLs</code> registry list to remove a critical DLL, then plant your version. Requires admin <em>and</em> a reboot for changes to take effect (KnownDLLs sections are built at boot). High-impact but high-noise  registry modifications to that key are textbook hunt targets.</p>
 
   <h3>5. DLL search order via <code>SetDllDirectory</code> abuse</h3>
   <p>Instead of dropping a DLL, change where the loader looks. <code>SetDllDirectory</code> alters the search path for the calling process and, critically, <em>disables</em> SafeDllSearchMode while a path is set. An attacker with code execution can use this primitive to redirect subsequent <code>LoadLibrary</code> calls. Detection: <code>SetDllDirectory</code> calls themselves are not always logged, but the resulting unsigned image loads from non-standard paths are.</p>
 
   <div class="telemetry">
-    <strong>Hunt template:</strong> for any signed parent process, find image-load events where the loaded DLL is (a) unsigned, (b) in a directory writable by non-admin users, and (c) has a same-named twin in <code>System32</code>. That single query catches the majority of search-order hijacking and side-loading in the wild. False-positive rate is governed by how messy your software inventory is &mdash; in mature environments, the signal is clean.
+    <strong>Hunt template:</strong> for any signed parent process, find image-load events where the loaded DLL is (a) unsigned, (b) in a directory writable by non-admin users, and (c) has a same-named twin in <code>System32</code>. That single query catches the majority of search-order hijacking and side-loading in the wild. False-positive rate is governed by how messy your software inventory is  in mature environments, the signal is clean.
   </div>
 
   <hr class="rule">
@@ -1062,7 +1062,7 @@ ntdll!_PEB
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
       <div class="q">When the kernel finishes setting up a new process, where does it transfer control? Why isn't it your <code>main</code>?</div>
-      <div class="a">It transfers to <code>ntdll!LdrInitializeThunk</code>. <code>main</code> can't run yet because the IAT hasn't been resolved &mdash; calls to imported functions would jump to garbage. The loader has to map every dependent DLL, run TLS callbacks, run each <code>DllMain</code>, and only then call the EXE's entry point (which itself calls <code>main</code> after CRT init).</div>
+      <div class="a">It transfers to <code>ntdll!LdrInitializeThunk</code>. <code>main</code> can't run yet because the IAT hasn't been resolved  calls to imported functions would jump to garbage. The loader has to map every dependent DLL, run TLS callbacks, run each <code>DllMain</code>, and only then call the EXE's entry point (which itself calls <code>main</code> after CRT init).</div>
     </div>
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
@@ -1072,12 +1072,12 @@ ntdll!_PEB
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
       <div class="q">Why can you not hijack <code>kernel32.dll</code> by dropping a malicious copy next to a target executable?</div>
-      <div class="a">Because <code>kernel32.dll</code> is in the KnownDLLs registry list. The kernel mapped the real <code>kernel32.dll</code> as a named section object at boot. When any process needs <code>kernel32.dll</code>, the loader finds it in the KnownDLLs section before consulting the disk-based search order. Bypassing this requires modifying <code>HKLM\System\CCS\Control\Session Manager\KnownDLLs</code> and rebooting &mdash; admin-only, high-noise.</div>
+      <div class="a">Because <code>kernel32.dll</code> is in the KnownDLLs registry list. The kernel mapped the real <code>kernel32.dll</code> as a named section object at boot. When any process needs <code>kernel32.dll</code>, the loader finds it in the KnownDLLs section before consulting the disk-based search order. Bypassing this requires modifying <code>HKLM\System\CCS\Control\Session Manager\KnownDLLs</code> and rebooting  admin-only, high-noise.</div>
     </div>
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
       <div class="q">SafeDllSearchMode is set to 0. What changes about the search order, and why is it dangerous?</div>
-      <div class="a">The current working directory moves from position 5 (after the system directories) to position 2 (right after the application directory). An attacker who controls the CWD of any process &mdash; for example by tricking a user into opening a file from a network share &mdash; can plant DLLs that the process will load before the real ones in <code>System32</code>. SafeDllSearchMode = 1 is default since XP SP2; modern hardening guides verify it explicitly.</div>
+      <div class="a">The current working directory moves from position 5 (after the system directories) to position 2 (right after the application directory). An attacker who controls the CWD of any process  for example by tricking a user into opening a file from a network share  can plant DLLs that the process will load before the real ones in <code>System32</code>. SafeDllSearchMode = 1 is default since XP SP2; modern hardening guides verify it explicitly.</div>
     </div>
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
@@ -1087,7 +1087,7 @@ ntdll!_PEB
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
       <div class="q">What does <code>PsSetLoadImageNotifyRoutine</code> do, and why is it the foundational EDR primitive?</div>
-      <div class="a">It registers a kernel callback that fires every time the kernel maps an executable image into any process &mdash; main EXEs and DLLs both. The callback receives the image base, size, full path, and target process. This happens <em>before</em> <code>DllMain</code> runs and cannot be evaded from user mode. EDRs use this for: image hashing, signing verification, IOC matching, optional blocking. To bypass, you need to either unload the EDR's driver (kernel exploit / BYOVD) or get your code to run before the callback registers (typically impossible).</div>
+      <div class="a">It registers a kernel callback that fires every time the kernel maps an executable image into any process  main EXEs and DLLs both. The callback receives the image base, size, full path, and target process. This happens <em>before</em> <code>DllMain</code> runs and cannot be evaded from user mode. EDRs use this for: image hashing, signing verification, IOC matching, optional blocking. To bypass, you need to either unload the EDR's driver (kernel exploit / BYOVD) or get your code to run before the callback registers (typically impossible).</div>
     </div>
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
@@ -1097,7 +1097,7 @@ ntdll!_PEB
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
       <div class="q">Walk through what an EDR sees when an attacker uses search-order hijacking against a signed application.</div>
-      <div class="a">The signed parent process spawns normally (clean Sysmon Event 1). The kernel's image-load callback fires for the main EXE (signed, expected). Then a second image-load callback fires for the planted DLL: same parent process, but the DLL is unsigned, in the application directory, and has a same-named legitimate twin in <code>System32</code>. That triple &mdash; signed parent + unsigned child DLL + System32 twin exists &mdash; is the high-fidelity hunt query. Sysmon Event 7 has the path and signing status; ETW Microsoft-Windows-Kernel-Process has the same data without Sysmon dependency.</div>
+      <div class="a">The signed parent process spawns normally (clean Sysmon Event 1). The kernel's image-load callback fires for the main EXE (signed, expected). Then a second image-load callback fires for the planted DLL: same parent process, but the DLL is unsigned, in the application directory, and has a same-named legitimate twin in <code>System32</code>. That triple  signed parent + unsigned child DLL + System32 twin exists  is the high-fidelity hunt query. Sysmon Event 7 has the path and signing status; ETW Microsoft-Windows-Kernel-Process has the same data without Sysmon dependency.</div>
     </div>
   </div>
 
@@ -1107,18 +1107,18 @@ ntdll!_PEB
   <h2><span class="num">§ 09</span> Closing thought</h2>
   <p>Four volumes in. Here is what we have built:</p>
   <ul style="font-family: var(--serif); color: var(--ink); padding-left: 24px;">
-    <li style="margin-bottom: 8px;">Vol. 01 &mdash; the alphabet (data types).</li>
-    <li style="margin-bottom: 8px;">Vol. 02 &mdash; the static skeleton (PE format).</li>
-    <li style="margin-bottom: 8px;">Vol. 03 &mdash; the living state (PEB / TEB / LDR list).</li>
-    <li>Vol. 04 &mdash; the machinery that builds and maintains that state (the loader).</li>
+    <li style="margin-bottom: 8px;">Vol. 01  the alphabet (data types).</li>
+    <li style="margin-bottom: 8px;">Vol. 02  the static skeleton (PE format).</li>
+    <li style="margin-bottom: 8px;">Vol. 03  the living state (PEB / TEB / LDR list).</li>
+    <li>Vol. 04  the machinery that builds and maintains that state (the loader).</li>
   </ul>
-  <p style="margin-top: 24px;">If you understand these four volumes well, you can read any tradecraft &mdash; reflective loading, manual mapping, hollowing, side-loading, doppelganging, herpaderping &mdash; and identify which structures are touched, which loader steps are bypassed or abused, and which detection chokepoints fire. None of those techniques are tricks pulled from a hat. They are all <em>compositions</em> of operations on the four layers above.</p>
+  <p style="margin-top: 24px;">If you understand these four volumes well, you can read any tradecraft  reflective loading, manual mapping, hollowing, side-loading, doppelganging, herpaderping  and identify which structures are touched, which loader steps are bypassed or abused, and which detection chokepoints fire. None of those techniques are tricks pulled from a hat. They are all <em>compositions</em> of operations on the four layers above.</p>
   <p>The same is true for detection engineering. Every credible EDR signal eventually grounds in: <em>did this image-load callback fire from a path we trust? Does this loaded module's <code>DllBase</code> match its signed image? Is loader lock being held by a thread doing something it shouldn't? Did <code>LdrLoadDll</code> just return a path nobody expected?</em></p>
-  <p>Next: <em class="pen">Vol. 05 &mdash; System Calls and the NT Layer</em>. We go below <code>ntdll.dll</code> &mdash; into the user/kernel transition itself. SSNs, syscall stubs, why <code>ntdll</code> is the only DLL you can rely on at the syscall boundary, and the entire family of techniques (Hell's Gate, Halo's Gate, Tartarus Gate, SysWhispers) that live in this seam &mdash; together with the kernel-side detection that watches for them.</p>
+  <p>Next: <em class="pen">Vol. 05  System Calls and the NT Layer</em>. We go below <code>ntdll.dll</code>  into the user/kernel transition itself. SSNs, syscall stubs, why <code>ntdll</code> is the only DLL you can rely on at the syscall boundary, and the entire family of techniques (Hell's Gate, Halo's Gate, Tartarus Gate, SysWhispers) that live in this seam  together with the kernel-side detection that watches for them.</p>
 
   <footer class="end">
     <div>filed under &middot; windows internals &middot; the loader &middot; offensive &amp; detection</div>
-    <div class="sig">&mdash; blacksunCUBE</div>
+    <div class="sig"> blacksunCUBE</div>
   </footer>
 
 </div>
