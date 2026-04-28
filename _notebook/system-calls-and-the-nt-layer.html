@@ -686,12 +686,12 @@ description: "How user-mode code crosses into the kernel, why every EDR cares, a
   </header>
 
   <h1>System Calls,<br><em>or: the eight bytes where the war is fought.</em></h1>
-  <p class="dek">A walk from <code>kernel32!CreateFileW</code> down to <code>syscall</code>, through the CPU's privilege boundary, and back &mdash; with a tour of every gate, every detection, and every detection bypass that lives in those four instructions.</p>
+  <p class="dek">A walk from <code>kernel32!CreateFileW</code> down to <code>syscall</code>, through the CPU's privilege boundary, and back  with a tour of every gate, every detection, and every detection bypass that lives in those four instructions.</p>
   <div class="byline">blacksun<span style="color:var(--exec);">CUBE</span> field notebook &middot; vol. 05 &middot; <em>builds on vol. 03 (PEB) &amp; vol. 04 (loader)</em></div>
 
-  <p>If vol. 04 was about the road that brings DLLs into your address space, vol. 05 is about the <em>border crossing</em> at the end of that road. Every Windows program, sooner or later, needs to do something only the kernel can do &mdash; allocate memory, open a file, start a thread, talk to a driver. The instruction that performs that crossing is <code>syscall</code>. It executes in roughly four CPU cycles. And around it, an entire industry of attack and detection has grown up over the last eight years.</p>
+  <p>If vol. 04 was about the road that brings DLLs into your address space, vol. 05 is about the <em>border crossing</em> at the end of that road. Every Windows program, sooner or later, needs to do something only the kernel can do  allocate memory, open a file, start a thread, talk to a driver. The instruction that performs that crossing is <code>syscall</code>. It executes in roughly four CPU cycles. And around it, an entire industry of attack and detection has grown up over the last eight years.</p>
 
-  <p>This volume is denser than the previous four. There's a reason: <em>this is where almost every modern EDR evasion technique either lives or dies</em>. Hell's Gate, Halo's Gate, Tartarus' Gate, FreshyCalls, SysWhispers, indirect syscalls, call-stack spoofing &mdash; you'll meet all of them, in the order they appeared, with the detection technique each one was built to defeat and the counter-detection it triggered.</p>
+  <p>This volume is denser than the previous four. There's a reason: <em>this is where almost every modern EDR evasion technique either lives or dies</em>. Hell's Gate, Halo's Gate, Tartarus' Gate, FreshyCalls, SysWhispers, indirect syscalls, call-stack spoofing  you'll meet all of them, in the order they appeared, with the detection technique each one was built to defeat and the counter-detection it triggered.</p>
 
   <p>Same axes you know:</p>
 
@@ -709,7 +709,7 @@ description: "How user-mode code crosses into the kernel, why every EDR cares, a
     <div class="legend-item x">
       <span class="tag">X &middot; Execute</span>
       <h4>The instruction itself</h4>
-      <p><code>syscall</code> &mdash; the privilege transition. The two bytes (<code>0x0F 0x05</code>) every kernel-side telemetry source pivots around.</p>
+      <p><code>syscall</code>  the privilege transition. The two bytes (<code>0x0F 0x05</code>) every kernel-side telemetry source pivots around.</p>
     </div>
   </div>
 
@@ -719,7 +719,7 @@ description: "How user-mode code crosses into the kernel, why every EDR cares, a
   <h2><span class="num">§ 01</span> Why the NT layer exists</h2>
   <p class="sub">A user/kernel split that ARM and x86 enforce in hardware, and a DLL that bridges them.</p>
 
-  <p>Modern CPUs have rings &mdash; privilege levels. On x86_64, the ones that matter are <strong>ring 3</strong> (user mode) and <strong>ring 0</strong> (kernel mode). Code in ring 3 can't touch hardware, can't write to physical memory, can't read another process's address space. Code in ring 0 can do all of those things. The CPU enforces this split <em>at every instruction</em>: the wrong opcode in ring 3 produces a fault, not a silent override.</p>
+  <p>Modern CPUs have rings  privilege levels. On x86_64, the ones that matter are <strong>ring 3</strong> (user mode) and <strong>ring 0</strong> (kernel mode). Code in ring 3 can't touch hardware, can't write to physical memory, can't read another process's address space. Code in ring 0 can do all of those things. The CPU enforces this split <em>at every instruction</em>: the wrong opcode in ring 3 produces a fault, not a silent override.</p>
 
   <p>That means your code, sitting comfortably in ring 3, has to <em>ask</em> the kernel to do anything privileged on its behalf. The asking happens via the <code>syscall</code> instruction. And the asking has to be structured: which operation? with what arguments? where does the result go? That structure is what the <strong>Nt layer</strong> in <code>ntdll.dll</code> provides.</p>
 
@@ -727,7 +727,7 @@ description: "How user-mode code crosses into the kernel, why every EDR cares, a
 
   <ol style="font-family: var(--serif); color: var(--ink); padding-left: 24px;">
     <li style="margin-bottom: 8px;">Saves <code>RCX</code> (the first argument register) into <code>R10</code>, because <code>syscall</code> clobbers <code>RCX</code>.</li>
-    <li style="margin-bottom: 8px;">Loads the <strong>System Service Number</strong> (SSN) into <code>EAX</code> &mdash; the integer that tells the kernel <em>which</em> operation you want.</li>
+    <li style="margin-bottom: 8px;">Loads the <strong>System Service Number</strong> (SSN) into <code>EAX</code>  the integer that tells the kernel <em>which</em> operation you want.</li>
     <li style="margin-bottom: 8px;">Issues the <code>syscall</code> instruction. Privilege transition happens here.</li>
     <li>Returns to the caller.</li>
   </ol>
@@ -743,8 +743,8 @@ ret                           <span class="c">; return to caller</span></pre>
   <p>Two facts to anchor everything else in this volume:</p>
 
   <ul style="font-family: var(--serif); color: var(--ink); padding-left: 24px;">
-    <li style="margin-bottom: 10px;"><strong>The SSN above (<code>0x18</code>) is not stable.</strong> It's representative for some Windows 10/11 builds; on other builds it's something else. Microsoft reorders its System Service Descriptor Table between releases. j00ru maintains <a style="color:var(--tele);">the canonical online table</a> tracking SSNs across every build &mdash; which is why hardcoded SSNs are a recipe for an exploit that works on your test VM and fails on a customer's box.</li>
-    <li><strong>The pattern itself is fixed.</strong> Every single <code>Nt*</code> function in <code>ntdll</code> begins with this exact 4-instruction sequence (in the unhooked case). That's what makes Hell's Gate work: you don't need symbols, you don't need imports &mdash; if you find the byte sequence, you can extract the SSN.</li>
+    <li style="margin-bottom: 10px;"><strong>The SSN above (<code>0x18</code>) is not stable.</strong> It's representative for some Windows 10/11 builds; on other builds it's something else. Microsoft reorders its System Service Descriptor Table between releases. j00ru maintains <a style="color:var(--tele);">the canonical online table</a> tracking SSNs across every build  which is why hardcoded SSNs are a recipe for an exploit that works on your test VM and fails on a customer's box.</li>
+    <li><strong>The pattern itself is fixed.</strong> Every single <code>Nt*</code> function in <code>ntdll</code> begins with this exact 4-instruction sequence (in the unhooked case). That's what makes Hell's Gate work: you don't need symbols, you don't need imports  if you find the byte sequence, you can extract the SSN.</li>
   </ul>
 
   <hr class="rule">
@@ -797,10 +797,10 @@ ret                           <span class="c">; return to caller</span></pre>
     </div>
   </div>
 
-  <p>The frame that matters operationally is <strong>frame 3</strong>. <code>ntdll!NtCreateFile</code> is the last user-mode function before the kernel. Everything above it can be hooked, replaced, unloaded; everything below it lives in kernel memory you cannot touch from a normal process. <em>That's why every EDR places its inline hooks at frame 3</em> &mdash; and why every direct-syscall technique aims to sidestep frame 3 entirely.</p>
+  <p>The frame that matters operationally is <strong>frame 3</strong>. <code>ntdll!NtCreateFile</code> is the last user-mode function before the kernel. Everything above it can be hooked, replaced, unloaded; everything below it lives in kernel memory you cannot touch from a normal process. <em>That's why every EDR places its inline hooks at frame 3</em>  and why every direct-syscall technique aims to sidestep frame 3 entirely.</p>
 
   <div class="margin">
-    The duplication you might notice &mdash; <code>kernel32!CreateFileW</code> calling <code>kernelbase!CreateFileW</code> &mdash; is a real artifact, introduced by Windows 7's MinWin refactor. Most Win32 functionality moved into <code>kernelbase.dll</code>, but <code>kernel32.dll</code> kept thin forwarders for ABI compatibility. Knowing this lets you read MSDN and call stacks correctly: when MS says "this is in kernel32," they almost always mean <em>the implementation lives in kernelbase</em>.
+    The duplication you might notice  <code>kernel32!CreateFileW</code> calling <code>kernelbase!CreateFileW</code>  is a real artifact, introduced by Windows 7's MinWin refactor. Most Win32 functionality moved into <code>kernelbase.dll</code>, but <code>kernel32.dll</code> kept thin forwarders for ABI compatibility. Knowing this lets you read MSDN and call stacks correctly: when MS says "this is in kernel32," they almost always mean <em>the implementation lives in kernelbase</em>.
   </div>
 
   <hr class="rule">
@@ -809,7 +809,7 @@ ret                           <span class="c">; return to caller</span></pre>
   <h2><span class="num">§ 03</span> What <code>syscall</code> actually does</h2>
   <p class="sub">A single instruction with a lot of CPU machinery behind it.</p>
 
-  <p>The <code>syscall</code> instruction is two bytes long: <code>0F 05</code>. Don't let that fool you &mdash; it triggers a sequence of CPU operations that's nothing like a normal function call.</p>
+  <p>The <code>syscall</code> instruction is two bytes long: <code>0F 05</code>. Don't let that fool you  it triggers a sequence of CPU operations that's nothing like a normal function call.</p>
 
   <div class="card exec">
     <div class="card-head">
@@ -845,7 +845,7 @@ ret                           <span class="c">; return to caller</span></pre>
 
   <div class="callout">
     <div class="label">why the user/kernel split is a security boundary, not a design choice</div>
-    <p>Without the privilege check the CPU enforces on every instruction, an EDR running in user mode would have no way to defend itself: any process could just overwrite the EDR's code, hooks, or detection logic. The user/kernel split lets the EDR put its <em>core</em> in ring 0 (a kernel driver) and its <em>visibility hooks</em> in ring 3 (DLLs injected into every process). User-mode hooks are convenient and fast, but they live on the attacker's side of the privilege boundary &mdash; and that asymmetry is the entire reason the syscall arms race exists.</p>
+    <p>Without the privilege check the CPU enforces on every instruction, an EDR running in user mode would have no way to defend itself: any process could just overwrite the EDR's code, hooks, or detection logic. The user/kernel split lets the EDR put its <em>core</em> in ring 0 (a kernel driver) and its <em>visibility hooks</em> in ring 3 (DLLs injected into every process). User-mode hooks are convenient and fast, but they live on the attacker's side of the privilege boundary  and that asymmetry is the entire reason the syscall arms race exists.</p>
   </div>
 
   <hr class="rule">
@@ -892,12 +892,12 @@ ret                           <span class="c">; return to caller</span></pre>
 
     <div class="epoch">
       <div class="name">SysWhispers <span class="yr">·  2019, Jackson_T</span></div>
-      <div class="desc">First widely-used generator. Hardcoded per-build SSN tables. Solved "EDR hooks <code>ntdll</code>" but introduced a heavy fingerprint &mdash; the embedded SSN tables themselves became a static-analysis IOC.</div>
+      <div class="desc">First widely-used generator. Hardcoded per-build SSN tables. Solved "EDR hooks <code>ntdll</code>" but introduced a heavy fingerprint  the embedded SSN tables themselves became a static-analysis IOC.</div>
     </div>
 
     <div class="epoch hells">
       <div class="name">Hell's Gate <span class="yr">·  2020, am0nsec &amp; RtlMateusz</span></div>
-      <div class="desc">No hardcoded SSNs. Walk the PEB, find <code>ntdll</code>, parse exports, read the SSN from the live stub at runtime. Drastically smaller binaries. <em>Defeated by:</em> EDRs that hook <code>ntdll</code> &mdash; the stub Hell's Gate reads is overwritten with a jump.</div>
+      <div class="desc">No hardcoded SSNs. Walk the PEB, find <code>ntdll</code>, parse exports, read the SSN from the live stub at runtime. Drastically smaller binaries. <em>Defeated by:</em> EDRs that hook <code>ntdll</code>  the stub Hell's Gate reads is overwritten with a jump.</div>
     </div>
 
     <div class="epoch halos">
@@ -912,7 +912,7 @@ ret                           <span class="c">; return to caller</span></pre>
 
     <div class="epoch indirect">
       <div class="name">Indirect syscalls <span class="yr">·  2022, multiple researchers</span></div>
-      <div class="desc">Direct syscalls have a giveaway: the <code>syscall</code> instruction lives in <em>your</em> <code>.text</code> section, so the kernel's return-address check shows the syscall came from a non-<code>ntdll</code> region. Indirect syscalls fix this: set up arguments yourself, but <code>jmp</code> into <code>ntdll</code>'s <em>own</em> <code>syscall;ret</code> gadget. The kernel sees a return address inside <code>ntdll</code> &mdash; legitimate-looking. <em>Defeated by:</em> EDRs that walk the entire call stack, not just the immediate return address.</div>
+      <div class="desc">Direct syscalls have a giveaway: the <code>syscall</code> instruction lives in <em>your</em> <code>.text</code> section, so the kernel's return-address check shows the syscall came from a non-<code>ntdll</code> region. Indirect syscalls fix this: set up arguments yourself, but <code>jmp</code> into <code>ntdll</code>'s <em>own</em> <code>syscall;ret</code> gadget. The kernel sees a return address inside <code>ntdll</code>  legitimate-looking. <em>Defeated by:</em> EDRs that walk the entire call stack, not just the immediate return address.</div>
     </div>
 
     <div class="epoch spoof">
@@ -948,7 +948,7 @@ jmp [ntdll_syscall_addr]
 <span style="color:var(--ink-faint);">; ntdll executes:</span>
 <span style="color:var(--read);">syscall            ; in ntdll!</span>
 ret</pre>
-      <p style="margin-top: 8px; font-size: 13px;">You jump to a <code>syscall;ret</code> gadget inside <code>ntdll</code>. The kernel sees a syscall whose return address points into <code>ntdll</code> &mdash; matches a legitimate API call. <strong>Bypasses the simple check</strong>, requires full call-stack analysis to detect.</p>
+      <p style="margin-top: 8px; font-size: 13px;">You jump to a <code>syscall;ret</code> gadget inside <code>ntdll</code>. The kernel sees a syscall whose return address points into <code>ntdll</code>  matches a legitimate API call. <strong>Bypasses the simple check</strong>, requires full call-stack analysis to detect.</p>
     </div>
   </div>
 
@@ -969,29 +969,29 @@ ret</pre>
   <p>EDRs with a kernel driver can register an instrumentation callback (<code>NtSetInformationProcess</code> with <code>ProcessInstrumentationCallback</code>) that fires after every syscall. The callback inspects the return address: <em>does it point into a known-good module like <code>ntdll</code> or <code>win32u</code>?</em> If not, you have a direct syscall. <strong>Defeated by indirect syscalls.</strong></p>
 
   <h3>3. ETW Threat-Intelligence (ETW-TI)</h3>
-  <p><code>Microsoft-Windows-Threat-Intelligence</code> is a kernel-side ETW provider that fires on a curated list of security-relevant operations &mdash; <code>NtAllocateVirtualMemory</code> in another process, <code>NtProtectVirtualMemory</code> changing a page to RX, <code>NtMapViewOfSection</code>, <code>NtCreateThreadEx</code>, etc. <strong>Crucial property:</strong> ETW-TI fires <em>inside the kernel</em>, regardless of whether the caller used direct, indirect, or any other user-mode technique. <em>The events are generated unconditionally; the access control is on who gets to read them.</em></p>
+  <p><code>Microsoft-Windows-Threat-Intelligence</code> is a kernel-side ETW provider that fires on a curated list of security-relevant operations  <code>NtAllocateVirtualMemory</code> in another process, <code>NtProtectVirtualMemory</code> changing a page to RX, <code>NtMapViewOfSection</code>, <code>NtCreateThreadEx</code>, etc. <strong>Crucial property:</strong> ETW-TI fires <em>inside the kernel</em>, regardless of whether the caller used direct, indirect, or any other user-mode technique. <em>The events are generated unconditionally; the access control is on who gets to read them.</em></p>
 
   <div class="margin">
-    <strong>2026 update &mdash; the bypass that landed.</strong> The "ETW-TI is unreachable without PPL" assumption held for years, and almost every EDR vendor's threat model depends on it. Connor McGarr published in January 2026 a technique that consumes the Threat-Intelligence provider <em>without</em> Antimalware-Light protection and <em>without</em> a kernel driver, by abusing the <code>SecurityTrace</code> flag on AutoLogger ETW sessions. Prelude released a working PoC tested on Windows 11 24H2 and 25H2 (<code>github.com/preludeorg/ThreatIntelligenceConsumer</code>). The implication for purple teamers: an attacker with admin can now read the same kernel telemetry the EDR reads &mdash; useful for understanding what's actually being detected. The implication for detection engineers: an EDR that assumes its ETW-TI consumer is the only one in the system can be observed, profiled, and outmaneuvered by a sufficiently motivated adversary. The events themselves still fire; the secrecy of who's listening doesn't.
+    <strong>2026 update  the bypass that landed.</strong> The "ETW-TI is unreachable without PPL" assumption held for years, and almost every EDR vendor's threat model depends on it. Connor McGarr published in January 2026 a technique that consumes the Threat-Intelligence provider <em>without</em> Antimalware-Light protection and <em>without</em> a kernel driver, by abusing the <code>SecurityTrace</code> flag on AutoLogger ETW sessions. Prelude released a working PoC tested on Windows 11 24H2 and 25H2 (<code>github.com/preludeorg/ThreatIntelligenceConsumer</code>). The implication for purple teamers: an attacker with admin can now read the same kernel telemetry the EDR reads  useful for understanding what's actually being detected. The implication for detection engineers: an EDR that assumes its ETW-TI consumer is the only one in the system can be observed, profiled, and outmaneuvered by a sufficiently motivated adversary. The events themselves still fire; the secrecy of who's listening doesn't.
   </div>
 
   <div class="margin">
-    ETW-TI is consumable only by processes running at <code>PsProtectedSignerAntimalware-Light</code> (one specific tier of PPL, not just any PPL), which requires an ELAM-signed driver Microsoft only co-signs for vetted security vendors. That's why Defender, CrowdStrike, SentinelOne, Elastic Defend, and other modern EDRs run their telemetry consumer at this protection level. From an attacker's perspective: if you can't BYOVD or get arbitrary kernel write, you historically couldn't blind ETW-TI from user mode. (See § 07's caveat below &mdash; that statement got narrower in 2026.) From a defender's perspective: an EDR that runs everything as a regular service, without Antimalware-Light protection, is leaving its eyes closed to the most reliable visibility on Windows.
+    ETW-TI is consumable only by processes running at <code>PsProtectedSignerAntimalware-Light</code> (one specific tier of PPL, not just any PPL), which requires an ELAM-signed driver Microsoft only co-signs for vetted security vendors. That's why Defender, CrowdStrike, SentinelOne, Elastic Defend, and other modern EDRs run their telemetry consumer at this protection level. From an attacker's perspective: if you can't BYOVD or get arbitrary kernel write, you historically couldn't blind ETW-TI from user mode. (See § 07's caveat below  that statement got narrower in 2026.) From a defender's perspective: an EDR that runs everything as a regular service, without Antimalware-Light protection, is leaving its eyes closed to the most reliable visibility on Windows.
   </div>
 
   <h3>4. Kernel call-stack capture (the current state of the art)</h3>
   <p>Combined with ETW-TI, EDRs can capture a full kernel-side call stack at the moment a sensitive syscall fires. Elastic Defend introduced the kernel call-stack capability in 8.8 (May 2023), and expanded it with dedicated direct- and indirect-syscall rules in 8.11 (November 2023). The detection looks for: <em>did the syscall actually come from a frame in <code>ntdll</code>, or did it come from a region with no backing image (private RWX memory)?</em> Even indirect syscalls fail this if the rest of the stack is fake.</p>
 
   <h3>5. Hardware breakpoints + VEH</h3>
-  <p>The most aggressive technique &mdash; defensive code sets DR0–DR3 hardware breakpoints on critical <code>Nt*</code> functions, registers a Vectored Exception Handler that fires on the breakpoint, and inspects <code>RSP</code> to verify the call originated from <code>ntdll</code>. Because there are only 4 hardware breakpoints, only the most security-relevant functions get this treatment (<code>NtProtectVirtualMemory</code>, <code>NtWriteVirtualMemory</code>, <code>NtCreateThreadEx</code>, <code>NtCreateUserProcess</code> are typical). See <em>Best EDR Of The Market V2</em> by xacone for a working implementation.</p>
+  <p>The most aggressive technique  defensive code sets DR0–DR3 hardware breakpoints on critical <code>Nt*</code> functions, registers a Vectored Exception Handler that fires on the breakpoint, and inspects <code>RSP</code> to verify the call originated from <code>ntdll</code>. Because there are only 4 hardware breakpoints, only the most security-relevant functions get this treatment (<code>NtProtectVirtualMemory</code>, <code>NtWriteVirtualMemory</code>, <code>NtCreateThreadEx</code>, <code>NtCreateUserProcess</code> are typical). See <em>Best EDR Of The Market V2</em> by xacone for a working implementation.</p>
 
   <div class="telemetry">
-    <strong>Hunt template:</strong> with ETW-TI + call stack collection enabled, hunt for <code>NtAllocateVirtualMemory</code> or <code>NtProtectVirtualMemory</code> events whose call stack contains <em>any frame</em> with <code>ImageFileName == NULL</code> &mdash; meaning the return address points into private memory, not a backed image. False positives: JIT compilers (.NET, V8, Java). Filter on legitimate JIT processes, alert on everything else. Elastic publishes a working rule set; SentinelOne and Defender for Endpoint have equivalents in their managed signatures.
+    <strong>Hunt template:</strong> with ETW-TI + call stack collection enabled, hunt for <code>NtAllocateVirtualMemory</code> or <code>NtProtectVirtualMemory</code> events whose call stack contains <em>any frame</em> with <code>ImageFileName == NULL</code>  meaning the return address points into private memory, not a backed image. False positives: JIT compilers (.NET, V8, Java). Filter on legitimate JIT processes, alert on everything else. Elastic publishes a working rule set; SentinelOne and Defender for Endpoint have equivalents in their managed signatures.
   </div>
 
   <h3>What the four-year story actually means</h3>
 
-  <p>For a purple-team operator, the practical takeaway is this: <em>direct syscalls alone are detectable in 2026</em>. They still work against legacy AV and against EDRs that don't use ETW-TI &mdash; which is more environments than you'd expect &mdash; but in a mature shop running Defender for Endpoint, CrowdStrike Falcon, SentinelOne, or Elastic Defend, you will fire telemetry the moment your shellcode allocates memory. The arms race has moved on to call-stack spoofing, which is itself getting harder as kernel callstack collection becomes standard.</p>
+  <p>For a purple-team operator, the practical takeaway is this: <em>direct syscalls alone are detectable in 2026</em>. They still work against legacy AV and against EDRs that don't use ETW-TI  which is more environments than you'd expect  but in a mature shop running Defender for Endpoint, CrowdStrike Falcon, SentinelOne, or Elastic Defend, you will fire telemetry the moment your shellcode allocates memory. The arms race has moved on to call-stack spoofing, which is itself getting harder as kernel callstack collection becomes standard.</p>
 
   <p>For a detection engineer: <em>build your detections around the kernel-side primitives, not the user-mode ones</em>. Hooks in <code>ntdll</code> are great for casual malware but bypassed by anything sophisticated. ETW-TI, kernel callbacks, and image-load callbacks are the foundation. Everything else is a force multiplier.</p>
 
@@ -1015,32 +1015,32 @@ ret</pre>
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
       <div class="q">Why is hardcoding SSN values in your tooling fragile, and what's the standard way to resolve them dynamically?</div>
-      <div class="a">SSNs are reordered between Windows builds &mdash; <code>NtAllocateVirtualMemory</code> on Windows 10 1903 is not the same number as on Windows 11 23H2. j00ru maintains the canonical online tracking table. Hell's Gate solves this by walking <code>PEB.Ldr</code> to find <code>ntdll</code>, parsing its export directory to locate the function, and reading the 4-byte SSN directly from the stub at offset +4. No version detection needed, no embedded table.</div>
+      <div class="a">SSNs are reordered between Windows builds  <code>NtAllocateVirtualMemory</code> on Windows 10 1903 is not the same number as on Windows 11 23H2. j00ru maintains the canonical online tracking table. Hell's Gate solves this by walking <code>PEB.Ldr</code> to find <code>ntdll</code>, parsing its export directory to locate the function, and reading the 4-byte SSN directly from the stub at offset +4. No version detection needed, no embedded table.</div>
     </div>
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
       <div class="q">What problem does Halo's Gate solve that Hell's Gate cannot?</div>
-      <div class="a">Hell's Gate fails when the target function in <code>ntdll</code> is hooked &mdash; the EDR has overwritten the first 5 bytes with a <code>jmp</code> trampoline, so reading offset +4 gives garbage. Halo's Gate detects the hook (first byte is <code>0xE9</code>), walks to the next <code>Nt*</code> function in memory, reads <em>its</em> unhooked SSN, and infers the hooked function's SSN by adjacent-offset arithmetic (since <code>Nt*</code> functions in <code>ntdll</code> have sequential SSNs). Tartarus' Gate extends Halo's pattern detection to additional hook formats.</div>
+      <div class="a">Hell's Gate fails when the target function in <code>ntdll</code> is hooked  the EDR has overwritten the first 5 bytes with a <code>jmp</code> trampoline, so reading offset +4 gives garbage. Halo's Gate detects the hook (first byte is <code>0xE9</code>), walks to the next <code>Nt*</code> function in memory, reads <em>its</em> unhooked SSN, and infers the hooked function's SSN by adjacent-offset arithmetic (since <code>Nt*</code> functions in <code>ntdll</code> have sequential SSNs). Tartarus' Gate extends Halo's pattern detection to additional hook formats.</div>
     </div>
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
       <div class="q">What is the IOC difference between a direct and an indirect syscall, from the kernel's perspective?</div>
-      <div class="a">In a direct syscall, the <code>syscall</code> instruction lives in the attacker's <code>.text</code> section, so the saved return address (in <code>RCX</code>, which the kernel reads) points into private memory or non-<code>ntdll</code> code. In an indirect syscall, the attacker <code>jmp</code>s to a <code>syscall;ret</code> gadget inside <code>ntdll</code>, so the return address looks legitimate. A simple "is the return address inside <code>ntdll</code>?" check catches direct syscalls and misses indirect ones &mdash; which is why call-stack spoofing became necessary next.</div>
+      <div class="a">In a direct syscall, the <code>syscall</code> instruction lives in the attacker's <code>.text</code> section, so the saved return address (in <code>RCX</code>, which the kernel reads) points into private memory or non-<code>ntdll</code> code. In an indirect syscall, the attacker <code>jmp</code>s to a <code>syscall;ret</code> gadget inside <code>ntdll</code>, so the return address looks legitimate. A simple "is the return address inside <code>ntdll</code>?" check catches direct syscalls and misses indirect ones  which is why call-stack spoofing became necessary next.</div>
     </div>
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
       <div class="q">What is ETW-TI, and why is it the bedrock of modern syscall-based detection?</div>
-      <div class="a"><code>Microsoft-Windows-Threat-Intelligence</code>, a kernel-side ETW provider that emits events on a curated list of security-sensitive operations (<code>NtAllocateVirtualMemory</code> remote, <code>NtProtectVirtualMemory</code> to RX, <code>NtMapViewOfSection</code>, etc.). Critically, the events themselves fire inside the kernel <em>regardless of how the syscall was invoked</em> &mdash; direct, indirect, hardware-breakpoint, hooked, unhooked. The access control is on the consumer side: traditionally only <code>PsProtectedSignerAntimalware-Light</code> processes (ELAM-signed by Microsoft) could subscribe. As of January 2026, Connor McGarr's <code>SecurityTrace</code> AutoLogger technique allows admin-level processes to consume the same events without PPL. The events remain unbypassable; the read-side monopoly does not.</div>
+      <div class="a"><code>Microsoft-Windows-Threat-Intelligence</code>, a kernel-side ETW provider that emits events on a curated list of security-sensitive operations (<code>NtAllocateVirtualMemory</code> remote, <code>NtProtectVirtualMemory</code> to RX, <code>NtMapViewOfSection</code>, etc.). Critically, the events themselves fire inside the kernel <em>regardless of how the syscall was invoked</em>  direct, indirect, hardware-breakpoint, hooked, unhooked. The access control is on the consumer side: traditionally only <code>PsProtectedSignerAntimalware-Light</code> processes (ELAM-signed by Microsoft) could subscribe. As of January 2026, Connor McGarr's <code>SecurityTrace</code> AutoLogger technique allows admin-level processes to consume the same events without PPL. The events remain unbypassable; the read-side monopoly does not.</div>
     </div>
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
       <div class="q">An EDR captures a kernel call stack on every <code>NtAllocateVirtualMemory</code>. What does it look for to flag the call as suspicious?</div>
-      <div class="a">It walks each frame and asks: does the return address point into a backed image (a mapped DLL or EXE on disk), or into private memory? A frame whose return address is in private memory &mdash; particularly RWX private memory &mdash; means the call originated from shellcode, not from a legitimate module. Even an indirect syscall that bounces off <code>ntdll</code> will leave higher frames pointing into the attacker's loader. The detection requires call-stack spoofing to bypass, not just indirect-syscall mechanics.</div>
+      <div class="a">It walks each frame and asks: does the return address point into a backed image (a mapped DLL or EXE on disk), or into private memory? A frame whose return address is in private memory  particularly RWX private memory  means the call originated from shellcode, not from a legitimate module. Even an indirect syscall that bounces off <code>ntdll</code> will leave higher frames pointing into the attacker's loader. The detection requires call-stack spoofing to bypass, not just indirect-syscall mechanics.</div>
     </div>
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
       <div class="q">What does the model-specific register IA32_LSTAR hold, and why does that matter for offensive tooling?</div>
-      <div class="a">It holds the address of the kernel's syscall entry point &mdash; on Windows, <code>nt!KiSystemCall64</code>. The CPU jumps there on every <code>syscall</code> instruction. From offensive tooling's perspective, this matters because: (a) any kernel-side analysis of where syscalls "come from" is fundamentally a check on the saved RIP / RCX after the jump, not on LSTAR itself; (b) BYOVD attacks that achieve kernel write can in theory point LSTAR elsewhere, but doing so is heavy-handed and immediately visible to integrity checks; (c) understanding LSTAR helps you read kernel-side disassembly when reverse-engineering EDRs.</div>
+      <div class="a">It holds the address of the kernel's syscall entry point  on Windows, <code>nt!KiSystemCall64</code>. The CPU jumps there on every <code>syscall</code> instruction. From offensive tooling's perspective, this matters because: (a) any kernel-side analysis of where syscalls "come from" is fundamentally a check on the saved RIP / RCX after the jump, not on LSTAR itself; (b) BYOVD attacks that achieve kernel write can in theory point LSTAR elsewhere, but doing so is heavy-handed and immediately visible to integrity checks; (c) understanding LSTAR helps you read kernel-side disassembly when reverse-engineering EDRs.</div>
     </div>
   </div>
 
@@ -1050,19 +1050,19 @@ ret</pre>
   <h2><span class="num">§ 09</span> Closing thought</h2>
   <p>Five volumes in. Here's the picture so far:</p>
   <ul style="font-family: var(--serif); color: var(--ink); padding-left: 24px;">
-    <li style="margin-bottom: 8px;"><strong>Vol. 01</strong> &mdash; the alphabet (data types).</li>
-    <li style="margin-bottom: 8px;"><strong>Vol. 02</strong> &mdash; the static skeleton (PE format).</li>
-    <li style="margin-bottom: 8px;"><strong>Vol. 03</strong> &mdash; the living state (PEB / TEB / LDR).</li>
-    <li style="margin-bottom: 8px;"><strong>Vol. 04</strong> &mdash; the machinery that builds that state (the loader).</li>
-    <li><strong>Vol. 05</strong> &mdash; the border crossing where everything leaves user mode (syscalls).</li>
+    <li style="margin-bottom: 8px;"><strong>Vol. 01</strong>  the alphabet (data types).</li>
+    <li style="margin-bottom: 8px;"><strong>Vol. 02</strong>  the static skeleton (PE format).</li>
+    <li style="margin-bottom: 8px;"><strong>Vol. 03</strong>  the living state (PEB / TEB / LDR).</li>
+    <li style="margin-bottom: 8px;"><strong>Vol. 04</strong>  the machinery that builds that state (the loader).</li>
+    <li><strong>Vol. 05</strong>  the border crossing where everything leaves user mode (syscalls).</li>
   </ul>
   <p style="margin-top: 24px;">If you've internalized those five volumes, you can read any modern EDR-bypass paper and have a structural mental model of what's happening. Hell's Gate? Vol. 03 (PEB walk) + vol. 02 (PE parse) + vol. 05 (SSN extraction). Process hollowing? Vol. 02 (PE) + vol. 03 (image-base patch) + vol. 05 (the syscalls that perform the patch). Manual mapping? All four prior volumes, composed.</p>
-  <p>The same is true for detection. The frontier in 2026 is no longer "did this process load a suspicious DLL" or "is this binary unsigned" &mdash; those are baseline. The frontier is <em>did the kernel observe a syscall whose call stack doesn't reconstruct to a legitimate module path</em>. ETW-TI plus call-stack capture, surfaced through Defender for Endpoint or Elastic Defend, is the current state of the art. Bypassing it requires kernel access; defending against the bypass requires the same.</p>
-  <p>Next: <em class="pen">Vol. 06 &mdash; Hooking and Unhooking</em>. We pivot from "how attackers avoid hooks" to "how hooks are installed in the first place." Inline trampolines, IAT/EAT hooks, vectored exception handlers, the four ways an EDR's DLL gets injected, and the corresponding unhook strategies. The goal: by the end of vol. 06, you should be able to look at any process and tell, by reading <code>ntdll</code>'s first 16 bytes, whether an EDR has visited.</p>
+  <p>The same is true for detection. The frontier in 2026 is no longer "did this process load a suspicious DLL" or "is this binary unsigned"  those are baseline. The frontier is <em>did the kernel observe a syscall whose call stack doesn't reconstruct to a legitimate module path</em>. ETW-TI plus call-stack capture, surfaced through Defender for Endpoint or Elastic Defend, is the current state of the art. Bypassing it requires kernel access; defending against the bypass requires the same.</p>
+  <p>Next: <em class="pen">Vol. 06  Hooking and Unhooking</em>. We pivot from "how attackers avoid hooks" to "how hooks are installed in the first place." Inline trampolines, IAT/EAT hooks, vectored exception handlers, the four ways an EDR's DLL gets injected, and the corresponding unhook strategies. The goal: by the end of vol. 06, you should be able to look at any process and tell, by reading <code>ntdll</code>'s first 16 bytes, whether an EDR has visited.</p>
 
   <footer class="end">
     <div>filed under &middot; windows internals &middot; syscalls &middot; offensive &amp; detection</div>
-    <div class="sig">&mdash; blacksunCUBE</div>
+    <div class="sig"> blacksunCUBE</div>
   </footer>
 
 </div>
