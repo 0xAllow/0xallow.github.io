@@ -697,18 +697,18 @@ description: "The PEB, the TEB, and what actually lives inside a process after t
   </header>
 
   <h1>Processes &amp; Threads,<br><em>or: what lives inside a process after the loader walks away.</em></h1>
-  <p class="dek">A reading of the Process Environment Block, the Thread Environment Block, and the doubly-linked module list that makes API resolution possible without a single import &mdash; written for people who hunt these structures or hide inside them.</p>
+  <p class="dek">A reading of the Process Environment Block, the Thread Environment Block, and the doubly-linked module list that makes API resolution possible without a single import  written for people who hunt these structures or hide inside them.</p>
   <div class="byline">blacksun<span style="color:var(--exec);">CUBE</span> field notebook &middot; vol. 03 &middot; <em>builds on vol. 01 &amp; vol. 02</em></div>
 
   <!-- ========== OPENING ========== -->
   <p>Vol. 02 ended with the loader finishing its job: a PE mapped into virtual memory, sections protected with their R/W/X flags, imports resolved, entry point ready to fire. Now the question becomes: <em>where does the process keep all the state that the kernel and user-mode runtime need to coordinate?</em></p>
 
-  <p>The answer is two structures &mdash; the PEB and the TEB &mdash; and one doubly-linked list. Together they are the process's autobiography. Every shellcode loader, every API hash resolver, every anti-debug check, every EDR detection of all of the above, lives or dies by what these structures contain and how to find them.</p>
+  <p>The answer is two structures  the PEB and the TEB  and one doubly-linked list. Together they are the process's autobiography. Every shellcode loader, every API hash resolver, every anti-debug check, every EDR detection of all of the above, lives or dies by what these structures contain and how to find them.</p>
 
   <p>Two warnings before we start, because I have seen both bite people in production code:</p>
 
   <div class="version-warn">
-    <strong>The offsets in this notebook are for x64 Windows 10 / 11.</strong> The PEB and TEB are <em>undocumented</em> structures &mdash; Microsoft reserves the right to move fields, and they have done so. ReWolf's blog catalogues 11 unique PEB layouts across Windows versions. If you're targeting Windows 7, Server 2003, or x86, <em>verify with WinDbg's <code>dt _PEB</code> and <code>dt _TEB</code> on your target system</em>. Hardcoding offsets without verifying is how shellcode ends up dereferencing garbage.
+    <strong>The offsets in this notebook are for x64 Windows 10 / 11.</strong> The PEB and TEB are <em>undocumented</em> structures  Microsoft reserves the right to move fields, and they have done so. ReWolf's blog catalogues 11 unique PEB layouts across Windows versions. If you're targeting Windows 7, Server 2003, or x86, <em>verify with WinDbg's <code>dt _PEB</code> and <code>dt _TEB</code> on your target system</em>. Hardcoding offsets without verifying is how shellcode ends up dereferencing garbage.
   </div>
 
   <p>Same color axes you know from vol. 01-02:</p>
@@ -739,10 +739,10 @@ description: "The PEB, the TEB, and what actually lives inside a process after t
 
   <p>Every thread on Windows has a TEB. Every process has exactly one PEB, shared by all its threads. The kernel sets up these structures before user-mode code starts running, and exposes their addresses through <strong>segment register tricks</strong> that have been stable since the NT family began.</p>
 
-  <p>On x64, the <code>GS</code> segment register's base address points at the <em>current thread's</em> TEB. On x86, the <code>FS</code> register does the same. This is not a memory load through the segment in the classical x86 sense &mdash; in long mode the GS base is a hidden register set up by <code>WRGSBASE</code> / <code>SWAPGS</code> by the kernel. From user mode, you read it as if it were a memory operand:</p>
+  <p>On x64, the <code>GS</code> segment register's base address points at the <em>current thread's</em> TEB. On x86, the <code>FS</code> register does the same. This is not a memory load through the segment in the classical x86 sense  in long mode the GS base is a hidden register set up by <code>WRGSBASE</code> / <code>SWAPGS</code> by the kernel. From user mode, you read it as if it were a memory operand:</p>
 
 <pre><span class="c">// x64 — get a pointer to the current TEB, then to the PEB</span>
-<span class="t">PTEB</span> teb = (<span class="t">PTEB</span>)<span class="fn">__readgsqword</span>(<span class="n">0x30</span>);  <span class="c">// TEB.NtTib.Self &mdash; offset 0x30 inside TEB</span>
+<span class="t">PTEB</span> teb = (<span class="t">PTEB</span>)<span class="fn">__readgsqword</span>(<span class="n">0x30</span>);  <span class="c">// TEB.NtTib.Self  offset 0x30 inside TEB</span>
 <span class="t">PPEB</span> peb = (<span class="t">PPEB</span>)<span class="fn">__readgsqword</span>(<span class="n">0x60</span>);  <span class="c">// TEB.ProcessEnvironmentBlock</span>
 
 <span class="c">// or in raw asm — the form you see in shellcode constantly:</span>
@@ -757,7 +757,7 @@ description: "The PEB, the TEB, and what actually lives inside a process after t
   </ol>
 
   <div class="telemetry">
-    <strong>Signal for defenders:</strong> The instruction <code>mov rax, gs:[0x60]</code> (bytes <code>65 48 8B 04 25 60 00 00 00</code>) is a textbook YARA pattern for shellcode. Legitimate code rarely accesses the PEB directly &mdash; it uses the documented API <code>NtCurrentTeb()</code>, which the compiler still emits as a GS read, but in well-known function prologues from <code>kernelbase</code> or the CRT. The <em>same instruction in a region without a corresponding loaded module</em> &mdash; private executable memory, RWX page, JIT-style allocation &mdash; is one of the strongest indicators of in-memory shellcode. Pair this with ETW <code>Microsoft-Windows-Threat-Intelligence</code> for kernel-side allocation events.
+    <strong>Signal for defenders:</strong> The instruction <code>mov rax, gs:[0x60]</code> (bytes <code>65 48 8B 04 25 60 00 00 00</code>) is a textbook YARA pattern for shellcode. Legitimate code rarely accesses the PEB directly  it uses the documented API <code>NtCurrentTeb()</code>, which the compiler still emits as a GS read, but in well-known function prologues from <code>kernelbase</code> or the CRT. The <em>same instruction in a region without a corresponding loaded module</em>  private executable memory, RWX page, JIT-style allocation  is one of the strongest indicators of in-memory shellcode. Pair this with ETW <code>Microsoft-Windows-Threat-Intelligence</code> for kernel-side allocation events.
   </div>
 
   <hr class="rule">
@@ -780,7 +780,7 @@ description: "The PEB, the TEB, and what actually lives inside a process after t
     <div class="mem-row hot">
       <div class="off-col">+0x002</div>
       <div class="name-col">BeingDebugged</div>
-      <div class="gloss-col">UCHAR &mdash; 1 if a debugger is attached</div>
+      <div class="gloss-col">UCHAR  1 if a debugger is attached</div>
     </div>
     <div class="mem-row">
       <div class="off-col">+0x003</div>
@@ -790,37 +790,37 @@ description: "The PEB, the TEB, and what actually lives inside a process after t
     <div class="mem-row hot">
       <div class="off-col">+0x010</div>
       <div class="name-col">ImageBaseAddress</div>
-      <div class="gloss-col">PVOID &mdash; base of the main EXE in memory</div>
+      <div class="gloss-col">PVOID  base of the main EXE in memory</div>
     </div>
     <div class="mem-row hot">
       <div class="off-col">+0x018</div>
       <div class="name-col">Ldr</div>
-      <div class="gloss-col">PPEB_LDR_DATA &mdash; the loaded-module list</div>
+      <div class="gloss-col">PPEB_LDR_DATA  the loaded-module list</div>
     </div>
     <div class="mem-row hot">
       <div class="off-col">+0x020</div>
       <div class="name-col">ProcessParameters</div>
-      <div class="gloss-col">PRTL_USER_PROCESS_PARAMETERS &mdash; cmdline, env, image path</div>
+      <div class="gloss-col">PRTL_USER_PROCESS_PARAMETERS  cmdline, env, image path</div>
     </div>
     <div class="mem-row">
       <div class="off-col">+0x028</div>
       <div class="name-col">SubSystemData</div>
-      <div class="gloss-col">PVOID &mdash; rarely interesting from user mode</div>
+      <div class="gloss-col">PVOID  rarely interesting from user mode</div>
     </div>
     <div class="mem-row">
       <div class="off-col">+0x030</div>
       <div class="name-col">ProcessHeap</div>
-      <div class="gloss-col">PVOID &mdash; default heap; same as <code>GetProcessHeap()</code></div>
+      <div class="gloss-col">PVOID  default heap; same as <code>GetProcessHeap()</code></div>
     </div>
     <div class="mem-row">
       <div class="off-col">+0x0BC</div>
       <div class="name-col">NtGlobalFlag</div>
-      <div class="gloss-col">DWORD &mdash; debug-related flags inherited from the registry</div>
+      <div class="gloss-col">DWORD  debug-related flags inherited from the registry</div>
     </div>
     <div class="mem-row">
       <div class="off-col">+0x2E8</div>
       <div class="name-col">SessionId</div>
-      <div class="gloss-col">DWORD &mdash; session 0 = services, 1+ = interactive</div>
+      <div class="gloss-col">DWORD  session 0 = services, 1+ = interactive</div>
     </div>
   </div>
 
@@ -845,7 +845,7 @@ description: "The PEB, the TEB, and what actually lives inside a process after t
 
   <h3><code>+0x010 ImageBaseAddress</code> — the in-memory copy of the main EXE</h3>
 
-  <p>This is the loaded base of the running executable &mdash; what the loader resolved <code>ImageBase</code> to (after ASLR moved it from its preferred address). It's the same value <code>GetModuleHandle(NULL)</code> returns. From here you can walk the PE headers exactly as in vol. 02: <code>e_lfanew</code> &rarr; NT Headers &rarr; export directory &rarr; functions.</p>
+  <p>This is the loaded base of the running executable  what the loader resolved <code>ImageBase</code> to (after ASLR moved it from its preferred address). It's the same value <code>GetModuleHandle(NULL)</code> returns. From here you can walk the PE headers exactly as in vol. 02: <code>e_lfanew</code> &rarr; NT Headers &rarr; export directory &rarr; functions.</p>
 
   <div class="twin">
     <div class="take red">
@@ -868,7 +868,7 @@ description: "The PEB, the TEB, and what actually lives inside a process after t
     <p class="gloss">"I point to a structure containing three doubly-linked lists of every DLL loaded in this process. Walk me to find <code>ntdll</code>, <code>kernel32</code>, anything you need."</p>
   </div>
 
-  <p>This is the field that makes shellcode possible. Vol. 02 explained how <code>HMODULE</code> equals the base address of a loaded module. Now we see how to <em>find</em> those bases without calling <code>GetModuleHandle</code> &mdash; without, in fact, importing anything at all.</p>
+  <p>This is the field that makes shellcode possible. Vol. 02 explained how <code>HMODULE</code> equals the base address of a loaded module. Now we see how to <em>find</em> those bases without calling <code>GetModuleHandle</code>  without, in fact, importing anything at all.</p>
 
   <p><code>PEB.Ldr</code> points to a <code>PEB_LDR_DATA</code> structure:</p>
 
@@ -881,7 +881,7 @@ description: "The PEB, the TEB, and what actually lives inside a process after t
     <span class="t">LIST_ENTRY</span> <span class="fld">InInitializationOrderModuleList</span>; <span class="c">// +0x30</span>
 } PEB_LDR_DATA, *PPEB_LDR_DATA;</pre>
 
-  <p>Three lists, same modules, different sort orders. Each list entry is a <code>LDR_DATA_TABLE_ENTRY</code> containing &mdash; among other things &mdash; the module's <strong>base address</strong> and its <strong>full DLL name</strong>:</p>
+  <p>Three lists, same modules, different sort orders. Each list entry is a <code>LDR_DATA_TABLE_ENTRY</code> containing  among other things  the module's <strong>base address</strong> and its <strong>full DLL name</strong>:</p>
 
 <pre><span class="k">typedef</span> <span class="k">struct</span> _LDR_DATA_TABLE_ENTRY {
     <span class="t">LIST_ENTRY</span>     InLoadOrderLinks;
@@ -916,7 +916,7 @@ description: "The PEB, the TEB, and what actually lives inside a process after t
 }</pre>
 
   <div class="margin">
-    The InLoadOrderModuleList is, predictably, sorted by load order. The first entry is always the running EXE itself; the second is <code>ntdll.dll</code>; the third historically was <code>kernel32.dll</code> but on Windows 10+ it's typically <code>kernelbase.dll</code> first. <em>Never trust position</em> &mdash; always hash the name. MalwareTech wrote about EDRs that intentionally swap the second and third entries with honeypot modules to trip naive shellcode that assumes order.
+    The InLoadOrderModuleList is, predictably, sorted by load order. The first entry is always the running EXE itself; the second is <code>ntdll.dll</code>; the third historically was <code>kernel32.dll</code> but on Windows 10+ it's typically <code>kernelbase.dll</code> first. <em>Never trust position</em>  always hash the name. MalwareTech wrote about EDRs that intentionally swap the second and third entries with honeypot modules to trip naive shellcode that assumes order.
   </div>
 
   <h3><code>+0x020 ProcessParameters</code> — command line, environment, image path</h3>
@@ -929,7 +929,7 @@ description: "The PEB, the TEB, and what actually lives inside a process after t
     <span class="c">// ... and dozens more fields ...</span>
 } RTL_USER_PROCESS_PARAMETERS;</pre>
 
-  <p>This is what every EDR reads to populate the "Command Line" column in its process tree. The values come from what the parent process passed to <code>CreateProcess</code> &mdash; <em>which the parent can lie about</em>.</p>
+  <p>This is what every EDR reads to populate the "Command Line" column in its process tree. The values come from what the parent process passed to <code>CreateProcess</code>  <em>which the parent can lie about</em>.</p>
 
   <div class="callout">
     <div class="label">command-line spoofing — why the field cannot be trusted</div>
@@ -937,7 +937,7 @@ description: "The PEB, the TEB, and what actually lives inside a process after t
   </div>
 
   <div class="telemetry">
-    <strong>Signal for defenders:</strong> Sysmon Event 1 (process creation) captures <code>CommandLine</code> from the parent's <code>CreateProcess</code> call. ETW <code>Microsoft-Windows-Kernel-Process</code> event 1 captures the same. Neither sees post-init spoofing. The robust signal is correlating Sysmon Event 1's <code>CommandLine</code> with a re-read of <code>PEB.ProcessParameters.CommandLine</code> a few seconds into process lifetime &mdash; if they differ, you've caught a spoofer. Tools like <a style="color:var(--tele);" href="#">hollows_hunter</a> have this check built in.
+    <strong>Signal for defenders:</strong> Sysmon Event 1 (process creation) captures <code>CommandLine</code> from the parent's <code>CreateProcess</code> call. ETW <code>Microsoft-Windows-Kernel-Process</code> event 1 captures the same. Neither sees post-init spoofing. The robust signal is correlating Sysmon Event 1's <code>CommandLine</code> with a re-read of <code>PEB.ProcessParameters.CommandLine</code> a few seconds into process lifetime  if they differ, you've caught a spoofer. Tools like <a style="color:var(--tele);" href="#">hollows_hunter</a> have this check built in.
   </div>
 
   <hr class="rule">
@@ -948,7 +948,7 @@ description: "The PEB, the TEB, and what actually lives inside a process after t
 
   <p>The PEB is process-wide; the TEB is thread-local. Every thread gets its own. The kernel allocates a fresh TEB during thread creation and updates the GS base accordingly on context switches, so <code>gs:[0]</code> always points to <em>your</em> TEB regardless of which thread you're on.</p>
 
-  <p>The first ~<code>0x38</code> bytes of the TEB are the <code>NT_TIB</code> &mdash; "Thread Information Block" &mdash; an even older substructure that predates the TEB. The TIB is the part you reach for most often:</p>
+  <p>The first ~<code>0x38</code> bytes of the TEB are the <code>NT_TIB</code>  "Thread Information Block"  an even older substructure that predates the TEB. The TIB is the part you reach for most often:</p>
 
   <div class="mem-map">
     <div class="caption">_TEB &middot; x64 layout &middot; first <code style="color:var(--ink-faint);">0x80</code> bytes</div>
@@ -960,37 +960,37 @@ description: "The PEB, the TEB, and what actually lives inside a process after t
     <div class="mem-row hot">
       <div class="off-col">+0x000</div>
       <div class="name-col">NtTib.ExceptionList</div>
-      <div class="gloss-col">x86 SEH chain head &mdash; <em>unused on x64</em> (x64 uses table-based unwinding)</div>
+      <div class="gloss-col">x86 SEH chain head  <em>unused on x64</em> (x64 uses table-based unwinding)</div>
     </div>
     <div class="mem-row hot">
       <div class="off-col">+0x008</div>
       <div class="name-col">NtTib.StackBase</div>
-      <div class="gloss-col">PVOID &mdash; highest valid stack address (top of stack)</div>
+      <div class="gloss-col">PVOID  highest valid stack address (top of stack)</div>
     </div>
     <div class="mem-row hot">
       <div class="off-col">+0x010</div>
       <div class="name-col">NtTib.StackLimit</div>
-      <div class="gloss-col">PVOID &mdash; lowest committed stack address (bottom)</div>
+      <div class="gloss-col">PVOID  lowest committed stack address (bottom)</div>
     </div>
     <div class="mem-row">
       <div class="off-col">+0x018</div>
       <div class="name-col">NtTib.SubSystemTib</div>
-      <div class="gloss-col">PVOID &mdash; reserved for subsystem DLLs</div>
+      <div class="gloss-col">PVOID  reserved for subsystem DLLs</div>
     </div>
     <div class="mem-row">
       <div class="off-col">+0x020</div>
       <div class="name-col">NtTib.FiberData</div>
-      <div class="gloss-col">PVOID &mdash; fiber state if thread runs fibers</div>
+      <div class="gloss-col">PVOID  fiber state if thread runs fibers</div>
     </div>
     <div class="mem-row">
       <div class="off-col">+0x028</div>
       <div class="name-col">NtTib.ArbitraryUserPointer</div>
-      <div class="gloss-col">PVOID &mdash; scratch slot, "use however you like"</div>
+      <div class="gloss-col">PVOID  scratch slot, "use however you like"</div>
     </div>
     <div class="mem-row hot">
       <div class="off-col">+0x030</div>
       <div class="name-col">NtTib.Self</div>
-      <div class="gloss-col">PTEB &mdash; <em>self-pointer</em>; lets <code>gs:[0x30]</code> linearize the TEB address</div>
+      <div class="gloss-col">PTEB  <em>self-pointer</em>; lets <code>gs:[0x30]</code> linearize the TEB address</div>
     </div>
     <div class="mem-row">
       <div class="off-col">+0x038</div>
@@ -1000,34 +1000,34 @@ description: "The PEB, the TEB, and what actually lives inside a process after t
     <div class="mem-row hot">
       <div class="off-col">+0x040</div>
       <div class="name-col">ClientId</div>
-      <div class="gloss-col">CLIENT_ID &mdash; { UniqueProcess (PID), UniqueThread (TID) }</div>
+      <div class="gloss-col">CLIENT_ID  { UniqueProcess (PID), UniqueThread (TID) }</div>
     </div>
     <div class="mem-row">
       <div class="off-col">+0x058</div>
       <div class="name-col">ThreadLocalStoragePointer</div>
-      <div class="gloss-col">PVOID &mdash; array of TLS slot pointers (PE-style TLS)</div>
+      <div class="gloss-col">PVOID  array of TLS slot pointers (PE-style TLS)</div>
     </div>
     <div class="mem-row hot">
       <div class="off-col">+0x060</div>
       <div class="name-col">ProcessEnvironmentBlock</div>
-      <div class="gloss-col">PPEB &mdash; <em>pointer to the process's PEB</em></div>
+      <div class="gloss-col">PPEB  <em>pointer to the process's PEB</em></div>
     </div>
     <div class="mem-row">
       <div class="off-col">+0x068</div>
       <div class="name-col">LastErrorValue</div>
-      <div class="gloss-col">DWORD &mdash; what <code>GetLastError()</code> returns</div>
+      <div class="gloss-col">DWORD  what <code>GetLastError()</code> returns</div>
     </div>
   </div>
 
   <h3>Why TEB-relative addressing is genius</h3>
 
-  <p>Notice <code>NtTib.Self</code> at <code>+0x30</code>: it points back to the TEB itself. This is not redundancy &mdash; it's a load-the-base-without-knowing-it trick. On x86, you can't directly read the FS-base register from user mode. But you can read <em>through</em> FS at offset 0x18 (the x86 location of <code>Self</code>):</p>
+  <p>Notice <code>NtTib.Self</code> at <code>+0x30</code>: it points back to the TEB itself. This is not redundancy  it's a load-the-base-without-knowing-it trick. On x86, you can't directly read the FS-base register from user mode. But you can read <em>through</em> FS at offset 0x18 (the x86 location of <code>Self</code>):</p>
 
 <pre><span class="c">// x86 — get the linear address of the current TEB</span>
 <span class="c">//   mov eax, fs:[0x18]   ; eax = TEB linear address</span>
 <span class="c">// On x64 the equivalent is gs:[0x30], but x64 also has __readgsqword(0).</span></pre>
 
-  <p>Once you have the linearized TEB pointer, you can pass it to functions that expect a regular pointer, hand it to debuggers, or use it for cross-thread inspection &mdash; none of which work with the segment-based form.</p>
+  <p>Once you have the linearized TEB pointer, you can pass it to functions that expect a regular pointer, hand it to debuggers, or use it for cross-thread inspection  none of which work with the segment-based form.</p>
 
   <h3><code>StackBase</code> and <code>StackLimit</code> — where your stack actually lives</h3>
 
@@ -1036,7 +1036,7 @@ description: "The PEB, the TEB, and what actually lives inside a process after t
   <div class="twin">
     <div class="take red">
       <h5>&rarr; operator's view &middot; stack pivot</h5>
-      <p>Stack pivots in exploitation rely on knowing or controlling the stack region. Sleep-mask techniques (Ekko, FOLIAGE, Cronos) move the stack to a fake region during sleep, encrypt the original, then swap back &mdash; this requires writing valid <code>StackBase</code> / <code>StackLimit</code> values so unwind metadata still resolves. Get them wrong and the next exception walks into garbage and the process dies.</p>
+      <p>Stack pivots in exploitation rely on knowing or controlling the stack region. Sleep-mask techniques (Ekko, FOLIAGE, Cronos) move the stack to a fake region during sleep, encrypt the original, then swap back  this requires writing valid <code>StackBase</code> / <code>StackLimit</code> values so unwind metadata still resolves. Get them wrong and the next exception walks into garbage and the process dies.</p>
     </div>
     <div class="take blue">
       <h5>&rarr; defender's view &middot; thread stack scanning</h5>
@@ -1051,7 +1051,7 @@ description: "The PEB, the TEB, and what actually lives inside a process after t
     <span class="t">HANDLE</span> <span class="fld">UniqueThread</span>;    <span class="c">// TID, also HANDLE-typed</span>
 } CLIENT_ID;</pre>
 
-  <p>These are the same values <code>GetCurrentProcessId()</code> and <code>GetCurrentThreadId()</code> return. The HANDLE typing is a quirk &mdash; they are not actual handles you can <code>CloseHandle</code> on; they're integers wrapped in HANDLE for legacy reasons. You'll see them throughout the native API: <code>NtOpenProcess</code> takes a <code>CLIENT_ID</code> as an out-of-band identifier.</p>
+  <p>These are the same values <code>GetCurrentProcessId()</code> and <code>GetCurrentThreadId()</code> return. The HANDLE typing is a quirk  they are not actual handles you can <code>CloseHandle</code> on; they're integers wrapped in HANDLE for legacy reasons. You'll see them throughout the native API: <code>NtOpenProcess</code> takes a <code>CLIENT_ID</code> as an out-of-band identifier.</p>
 
   <hr class="rule">
 
@@ -1118,7 +1118,7 @@ add     rax, rbx                  <span class="c">; rax = IMAGE_EXPORT_DIRECTORY
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
       <div class="q">There are three module lists in <code>PEB_LDR_DATA</code>. Why three, and which one do shellcoders typically walk?</div>
-      <div class="a">All three contain the same modules in different sort orders: load order, memory order, initialization order. Shellcoders typically walk <code>InLoadOrderModuleList</code> at offset <code>+0x10</code> because the running EXE is always first and <code>ntdll.dll</code> is always second &mdash; predictable, but this is also why EDRs sometimes inject honeypot modules at those positions to catch order-based shellcode. Hash the <code>BaseDllName</code>, never trust position.</div>
+      <div class="a">All three contain the same modules in different sort orders: load order, memory order, initialization order. Shellcoders typically walk <code>InLoadOrderModuleList</code> at offset <code>+0x10</code> because the running EXE is always first and <code>ntdll.dll</code> is always second  predictable, but this is also why EDRs sometimes inject honeypot modules at those positions to catch order-based shellcode. Hash the <code>BaseDllName</code>, never trust position.</div>
     </div>
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
@@ -1133,7 +1133,7 @@ add     rax, rbx                  <span class="c">; rax = IMAGE_EXPORT_DIRECTORY
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
       <div class="q">What do <code>StackBase</code> and <code>StackLimit</code> in the TIB tell you, and why do sleep-mask techniques care about them?</div>
-      <div class="a"><code>StackBase</code> is the top (highest address) of the thread's stack; <code>StackLimit</code> is the bottom of the currently committed region. Sleep-mask techniques (Ekko, FOLIAGE) temporarily relocate the stack during a sleep cycle to evade EDRs that scan thread stacks for return addresses pointing into private RWX memory. To make the relocation valid, they must write coherent <code>StackBase</code>/<code>StackLimit</code> values &mdash; otherwise stack-walk-based detection breaks the process when an exception fires.</div>
+      <div class="a"><code>StackBase</code> is the top (highest address) of the thread's stack; <code>StackLimit</code> is the bottom of the currently committed region. Sleep-mask techniques (Ekko, FOLIAGE) temporarily relocate the stack during a sleep cycle to evade EDRs that scan thread stacks for return addresses pointing into private RWX memory. To make the relocation valid, they must write coherent <code>StackBase</code>/<code>StackLimit</code> values  otherwise stack-walk-based detection breaks the process when an exception fires.</div>
     </div>
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
@@ -1143,7 +1143,7 @@ add     rax, rbx                  <span class="c">; rax = IMAGE_EXPORT_DIRECTORY
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
       <div class="q">A YARA rule fires on the byte sequence <code>65 48 8B 04 25 60 00 00 00</code> in private memory regions. What is the rule looking for and why is the location significant?</div>
-      <div class="a">That's <code>mov rax, gs:[0x60]</code> &mdash; reading the PEB pointer. Legitimate code uses this in well-known function prologues from <code>kernelbase</code> / CRT, which are mapped from on-disk images. The same instruction in <em>private</em> executable memory (RWX page, JIT-style allocation, or unmapped region) is the textbook opening of in-memory shellcode resolving APIs without imports. Pair with stack-walk telemetry for high-confidence detection.</div>
+      <div class="a">That's <code>mov rax, gs:[0x60]</code>  reading the PEB pointer. Legitimate code uses this in well-known function prologues from <code>kernelbase</code> / CRT, which are mapped from on-disk images. The same instruction in <em>private</em> executable memory (RWX page, JIT-style allocation, or unmapped region) is the textbook opening of in-memory shellcode resolving APIs without imports. Pair with stack-walk telemetry for high-confidence detection.</div>
     </div>
   </div>
 
@@ -1152,14 +1152,14 @@ add     rax, rbx                  <span class="c">; rax = IMAGE_EXPORT_DIRECTORY
   <!-- ========== § 06: CLOSING ========== -->
   <h2><span class="num">§ 06</span> Closing thought</h2>
   <p>Three volumes in, here is what we have actually built: a complete model of how a Windows process exists in memory.</p>
-  <p>Vol. 01 gave us the alphabet &mdash; the integers, pointers, handles, and strings that the kernel and runtime exchange. Vol. 02 gave us the static skeleton &mdash; the PE format that describes how an executable is laid out on disk and how the loader unpacks it into memory. This volume gave us the living state &mdash; the PEB describing the process, the TEB describing each thread, and the Ldr list connecting every loaded module by base address.</p>
-  <p>From here, the offensive techniques you will read about &mdash; reflective loading, manual mapping, process hollowing, doppelganging, sleep masks, indirect syscalls, API hashing, IAT-less calls &mdash; are all <em>recombinations</em> of operations on these three layers. None of them is a separate skill. They are all the same skill, applied with different intent.</p>
+  <p>Vol. 01 gave us the alphabet  the integers, pointers, handles, and strings that the kernel and runtime exchange. Vol. 02 gave us the static skeleton  the PE format that describes how an executable is laid out on disk and how the loader unpacks it into memory. This volume gave us the living state  the PEB describing the process, the TEB describing each thread, and the Ldr list connecting every loaded module by base address.</p>
+  <p>From here, the offensive techniques you will read about  reflective loading, manual mapping, process hollowing, doppelganging, sleep masks, indirect syscalls, API hashing, IAT-less calls  are all <em>recombinations</em> of operations on these three layers. None of them is a separate skill. They are all the same skill, applied with different intent.</p>
   <p>The same is true for detection. Every credible EDR signal eventually grounds in: <em>does the byte at this PEB offset look right? Does the on-disk image match the in-memory image at <code>ImageBaseAddress</code>? Is this thread's stack walking through expected modules? Is this <code>NtWriteVirtualMemory</code> targeting a remote PEB?</em> The vocabulary is small. The composition is endless.</p>
-  <p>Next: <em class="pen">The Windows Loader &mdash; how a DLL actually gets into your address space</em>. We watch <code>LoadLibrary</code> turn into <code>LdrLoadDll</code> turn into <code>LdrpLoadDll</code>, see the LDR list grow in real time, watch <code>DllMain</code> fire, and trace exactly which detection opportunities appear at each stage.</p>
+  <p>Next: <em class="pen">The Windows Loader  how a DLL actually gets into your address space</em>. We watch <code>LoadLibrary</code> turn into <code>LdrLoadDll</code> turn into <code>LdrpLoadDll</code>, see the LDR list grow in real time, watch <code>DllMain</code> fire, and trace exactly which detection opportunities appear at each stage.</p>
 
   <footer class="end">
     <div>filed under &middot; windows internals &middot; peb / teb &middot; offensive &amp; detection</div>
-    <div class="sig">&mdash; blacksunCUBE</div>
+    <div class="sig"> blacksunCUBE</div>
   </footer>
 
 </div>
