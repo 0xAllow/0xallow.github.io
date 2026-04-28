@@ -687,15 +687,15 @@ description: "An operator's map of the Portable Executable format."
   </header>
 
   <h1>The PE Format,<br><em>or: how an .exe becomes a process.</em></h1>
-  <p class="dek">A reading of the Portable Executable format for people who need to write loaders, unhook DLLs, and build detections &mdash; <strong>not</strong> for people who need to pass a compiler exam.</p>
+  <p class="dek">A reading of the Portable Executable format for people who need to write loaders, unhook DLLs, and build detections  ; <strong>not</strong> for people who need to pass a compiler exam.</p>
   <div class="byline">blacksun<span style="color:var(--exec);">CUBE</span> field notebook &middot; vol. 02 &middot; <em>builds on vol. 01 (data types)</em></div>
 
   <!-- ========== OPENING ========== -->
   <p>Every PE explainer on the internet starts the same way: a giant diagram of the file layout, then a breathless walk through every field of every header. You read it once, retain maybe 20%, and come back to it every three months when something breaks.</p>
 
-  <p>I want to do something different here. We are going to read the PE format <em class="pen">the way the loader reads it</em> &mdash; in the order the OS actually needs each piece &mdash; because that is the order in which each piece starts to mean something. A field you cannot explain in terms of "what does the loader do with this" is a field you have not really learned.</p>
+  <p>I want to do something different here. We are going to read the PE format <em class="pen">the way the loader reads it</em>  ; in the order the OS actually needs each piece  ; because that is the order in which each piece starts to mean something. A field you cannot explain in terms of "what does the loader do with this" is a field you have not really learned.</p>
 
-  <p>Same color axes as vol. 01 &mdash; and this time, the colors are not a metaphor. PE <strong>sections carry literal R/W/X flags</strong> in their characteristics, and almost every interesting thing in offensive tooling revolves around those flags being something they should not be.</p>
+  <p>Same color axes as vol. 01  ; and this time, the colors are not a metaphor. PE <strong>sections carry literal R/W/X flags</strong> in their characteristics, and almost every interesting thing in offensive tooling revolves around those flags being something they should not be.</p>
 
   <div class="legend">
     <div class="legend-item r">
@@ -711,7 +711,7 @@ description: "An operator's map of the Portable Executable format."
     <div class="legend-item x">
       <span class="tag">X &middot; Execute</span>
       <h4>Bytes the CPU will fetch</h4>
-      <p>Code pages. <code>.text</code>. The only memory that should ever get the execute bit &mdash; and when something else does, you are looking at an attack.</p>
+      <p>Code pages. <code>.text</code>. The only memory that should ever get the execute bit  ; and when something else does, you are looking at an attack.</p>
     </div>
   </div>
 
@@ -721,7 +721,7 @@ description: "An operator's map of the Portable Executable format."
 
   <p>On disk, a PE file is a compact archive: headers packed tight, sections stored with their raw sizes, alignment at 512 bytes (historically one disk sector). In memory, the same file is a sprawling region: headers mapped to a page boundary, each section expanded to a larger virtual size, gaps zero-filled, alignment at 4096 bytes (the CPU page size).</p>
 
-  <p>The loader's job &mdash; the <strong>entire</strong> job, stripped of ceremony &mdash; is to read the on-disk layout, allocate a region of virtual memory, copy each section to its new home, fix up the pointers, and jump to the entry point. Everything else in this notebook is detail about how that map gets read.</p>
+  <p>The loader's job  ; the <strong>entire</strong> job, stripped of ceremony  ; is to read the on-disk layout, allocate a region of virtual memory, copy each section to its new home, fix up the pointers, and jump to the entry point. Everything else in this notebook is detail about how that map gets read.</p>
 
   <div class="pe-map">
     <div class="caption">
@@ -747,7 +747,7 @@ description: "An operator's map of the Portable Executable format."
         <div class="pe-block sec-r" style="padding-top: 16px; padding-bottom: 16px;"><span class="lbl">.rdata &nbsp; R--</span><span class="off">+ 0x?000</span></div>
         <div class="pe-block sec-w" style="padding-top: 16px; padding-bottom: 16px;"><span class="lbl">.data &nbsp; RW-</span><span class="off">+ 0x?000</span></div>
         <div class="pe-block sec-w" style="padding-top: 16px; padding-bottom: 16px;"><span class="lbl">.reloc &nbsp; R--</span><span class="off">+ 0x?000</span></div>
-        <div class="pe-block pad"><span class="lbl">(page aligned, larger virtual size)</span><span class="off">&mdash;</span></div>
+        <div class="pe-block pad"><span class="lbl">(page aligned, larger virtual size)</span><span class="off"> ;</span></div>
       </div>
     </div>
   </div>
@@ -756,14 +756,14 @@ description: "An operator's map of the Portable Executable format."
 
   <table>
     <tr><td>File offset (raw)</td><td>Byte position inside the .exe as it sits on disk. Aligned to <code>FileAlignment</code>, usually <code>0x200</code>.</td></tr>
-    <tr><td>RVA &mdash; relative virtual address</td><td>Byte position <em>inside the mapped image</em>, measured from <code>ImageBase</code>. Aligned to <code>SectionAlignment</code>, usually <code>0x1000</code>.</td></tr>
-    <tr><td>VA &mdash; virtual address</td><td><code>ImageBase + RVA</code>. The actual address a pointer in the running process would contain.</td></tr>
+    <tr><td>RVA  ; relative virtual address</td><td>Byte position <em>inside the mapped image</em>, measured from <code>ImageBase</code>. Aligned to <code>SectionAlignment</code>, usually <code>0x1000</code>.</td></tr>
+    <tr><td>VA  ; virtual address</td><td><code>ImageBase + RVA</code>. The actual address a pointer in the running process would contain.</td></tr>
   </table>
 
   <p>A PE parser is, in large part, a machine for translating between these three. Get the translation wrong and nothing else you do will work; get it right and half the subsequent complexity evaporates.</p>
 
   <div class="margin">
-    If you have ever wondered why <code>VirtualSize</code> and <code>SizeOfRawData</code> on a section header are different numbers &mdash; this is the reason. <code>SizeOfRawData</code> is how many bytes the section takes on disk (multiple of 0x200). <code>VirtualSize</code> is how many bytes it wants in memory (often larger, because <code>.bss</code>-style zero-filled regions are not stored on disk at all &mdash; the loader just allocates zeros).
+    If you have ever wondered why <code>VirtualSize</code> and <code>SizeOfRawData</code> on a section header are different numbers  ; this is the reason. <code>SizeOfRawData</code> is how many bytes the section takes on disk (multiple of 0x200). <code>VirtualSize</code> is how many bytes it wants in memory (often larger, because <code>.bss</code>-style zero-filled regions are not stored on disk at all  ; the loader just allocates zeros).
   </div>
 
   <hr class="rule">
@@ -779,7 +779,7 @@ description: "An operator's map of the Portable Executable format."
     </div>
     <p class="gloss">"I am a fossil layer. Ignore me, except for one offset at the end that tells you where the real header starts."</p>
 <pre><span class="k">typedef</span> <span class="k">struct</span> _IMAGE_DOS_HEADER {
-    <span class="t">WORD</span>  <span class="fld">e_magic</span>;       <span class="c">// 'MZ'  (0x5A4D) &mdash; the two bytes every PE begins with</span>
+    <span class="t">WORD</span>  <span class="fld">e_magic</span>;       <span class="c">// 'MZ'  (0x5A4D)  ; the two bytes every PE begins with</span>
     <span class="t">WORD</span>  <span class="fld">e_cblp</span>;
     <span class="t">WORD</span>  <span class="fld">e_cp</span>;
     <span class="c">// ... 25 fields of DOS-era junk we will never touch ...</span>
@@ -789,7 +789,7 @@ description: "An operator's map of the Portable Executable format."
 
   <p>The PE format starts with a complete MS-DOS executable header so that if someone accidentally ran a Windows binary on DOS, they would get the friendly "This program cannot be run in DOS mode" message instead of a crash. That scenario stopped mattering around 1997. The header stayed.</p>
 
-  <p>For you, the only field in this entire structure that matters is <code>e_lfanew</code> &mdash; a 4-byte offset pointing to the <em>real</em> header. Every PE parser does the same two-step:</p>
+  <p>For you, the only field in this entire structure that matters is <code>e_lfanew</code>  ; a 4-byte offset pointing to the <em>real</em> header. Every PE parser does the same two-step:</p>
 
 <pre><span class="t">PIMAGE_DOS_HEADER</span>  pDos = (<span class="t">PIMAGE_DOS_HEADER</span>)pImageBase;
 <span class="t">PIMAGE_NT_HEADERS</span>  pNt  = (<span class="t">PIMAGE_NT_HEADERS</span>)((<span class="t">ULONG_PTR</span>)pImageBase + pDos-&gt;e_lfanew);</pre>
@@ -797,7 +797,7 @@ description: "An operator's map of the Portable Executable format."
   <p>That cast-through-<code>ULONG_PTR</code> should look familiar from vol. 01. This line, or a small variation of it, opens <em>every</em> manual mapper, reflective loader, and API-hashing stub ever written.</p>
 
   <div class="telemetry">
-    <strong>Signal for defenders:</strong> a valid PE on disk or in memory always starts with <code>MZ</code> at offset 0 and has a valid <code>e_lfanew</code> pointing somewhere reasonable (not into the header itself, not past the file). YARA rules and memory scanners use these invariants as their coarsest first filter. Shellcode that maps a PE manually but forgets to copy the DOS header or zeros it out is still a PE semantically &mdash; but <strong>memory-scanning an address space for regions that start with <code>MZ</code></strong> is the first thing any memory scanner does. That is why stealthier loaders sometimes erase the MZ/PE signatures after loading.
+    <strong>Signal for defenders:</strong> a valid PE on disk or in memory always starts with <code>MZ</code> at offset 0 and has a valid <code>e_lfanew</code> pointing somewhere reasonable (not into the header itself, not past the file). YARA rules and memory scanners use these invariants as their coarsest first filter. Shellcode that maps a PE manually but forgets to copy the DOS header or zeros it out is still a PE semantically  ; but <strong>memory-scanning an address space for regions that start with <code>MZ</code></strong> is the first thing any memory scanner does. That is why stealthier loaders sometimes erase the MZ/PE signatures after loading.
   </div>
 
   <hr class="rule">
@@ -812,9 +812,9 @@ description: "An operator's map of the Portable Executable format."
     <span class="t">IMAGE_OPTIONAL_HEADER</span> <span class="fld">OptionalHeader</span>;  <span class="c">// everything the loader actually needs</span>
 } IMAGE_NT_HEADERS64, *PIMAGE_NT_HEADERS64;</pre>
 
-  <p>Three things nested together. The <code>Signature</code> is the four bytes <code>"PE\0\0"</code> &mdash; the second magic number (after <code>MZ</code>) that confirms this is really a PE file. Then two sub-structures.</p>
+  <p>Three things nested together. The <code>Signature</code> is the four bytes <code>"PE\0\0"</code>  ; the second magic number (after <code>MZ</code>) that confirms this is really a PE file. Then two sub-structures.</p>
 
-  <h3>The FileHeader &mdash; what this binary is</h3>
+  <h3>The FileHeader  ; what this binary is</h3>
 
   <div class="card read">
     <div class="card-head">
@@ -832,16 +832,16 @@ description: "An operator's map of the Portable Executable format."
 } IMAGE_FILE_HEADER, *PIMAGE_FILE_HEADER;</pre>
   </div>
 
-  <p>Three fields here carry their weight. <code>Machine</code> tells you the architecture &mdash; absolutely critical if you are writing cross-architecture tooling, and a common defender signal when a process unexpectedly loads an ARM64 module on an x64 box, or vice versa. <code>NumberOfSections</code> bounds the section header array you are about to walk. <code>Characteristics</code> is a bitmask with two flags you care about:</p>
+  <p>Three fields here carry their weight. <code>Machine</code> tells you the architecture  ; absolutely critical if you are writing cross-architecture tooling, and a common defender signal when a process unexpectedly loads an ARM64 module on an x64 box, or vice versa. <code>NumberOfSections</code> bounds the section header array you are about to walk. <code>Characteristics</code> is a bitmask with two flags you care about:</p>
 
-<pre>IMAGE_FILE_DLL             <span class="c">// 0x2000  &mdash; this is a DLL, not an EXE</span>
-IMAGE_FILE_EXECUTABLE_IMAGE <span class="c">// 0x0002  &mdash; bytes are a valid image (not an object file)</span></pre>
+<pre>IMAGE_FILE_DLL             <span class="c">// 0x2000   ; this is a DLL, not an EXE</span>
+IMAGE_FILE_EXECUTABLE_IMAGE <span class="c">// 0x0002   ; bytes are a valid image (not an object file)</span></pre>
 
   <div class="margin">
-    <code>TimeDateStamp</code> is supposedly the Unix time at which the linker built the binary. In practice: compilers like MSVC with <code>/Brepro</code> deterministic builds replace it with a hash, malware families often zero it or set it to an obviously-wrong value, and state-tier actors forge it to match benign binaries. Never trust it as forensic evidence on its own &mdash; but an <em>unexpectedly consistent</em> timestamp across a campaign's samples is its own signal.
+    <code>TimeDateStamp</code> is supposedly the Unix time at which the linker built the binary. In practice: compilers like MSVC with <code>/Brepro</code> deterministic builds replace it with a hash, malware families often zero it or set it to an obviously-wrong value, and state-tier actors forge it to match benign binaries. Never trust it as forensic evidence on its own  ; but an <em>unexpectedly consistent</em> timestamp across a campaign's samples is its own signal.
   </div>
 
-  <h3>The OptionalHeader &mdash; everything the loader actually needs</h3>
+  <h3>The OptionalHeader  ; everything the loader actually needs</h3>
 
   <div class="card read">
     <div class="card-head">
@@ -870,7 +870,7 @@ IMAGE_FILE_EXECUTABLE_IMAGE <span class="c">// 0x0002  &mdash; bytes are a valid
     <span class="t">DWORD</span>       SizeOfHeaders;
     <span class="t">DWORD</span>       CheckSum;
     <span class="t">WORD</span>        Subsystem;              <span class="c">// 2 = GUI, 3 = console, ...</span>
-    <span class="t">WORD</span>        <span class="fld">DllCharacteristics</span>;   <span class="c">// ASLR, DEP, CFG flags &mdash; matters for defense</span>
+    <span class="t">WORD</span>        <span class="fld">DllCharacteristics</span>;   <span class="c">// ASLR, DEP, CFG flags  ; matters for defense</span>
 
     <span class="c">// ... stack/heap reserve/commit sizes ...</span>
 
@@ -885,11 +885,11 @@ IMAGE_FILE_EXECUTABLE_IMAGE <span class="c">// 0x0002  &mdash; bytes are a valid
     <tr><td>ImageBase</td><td>The VA where the module <em>wants</em> to be loaded. If the OS can honor this, no relocations are needed. If it can't (ASLR, conflicts), the relocation section is walked to fix up every absolute pointer.</td></tr>
     <tr><td>AddressOfEntryPoint</td><td>RVA of the first instruction. For an EXE, this is where the CRT stub starts. For a DLL, this is <code>DllMain</code> (called with <code>DLL_PROCESS_ATTACH</code>).</td></tr>
     <tr><td>SizeOfImage</td><td>Total bytes to reserve. Your manual mapper passes this to <code>VirtualAlloc</code>. Get it wrong and your sections overflow into neighboring allocations.</td></tr>
-    <tr><td>DataDirectory[16]</td><td>The table of contents. Each entry is a <code>{ RVA, Size }</code> pair pointing to a major PE structure &mdash; imports, exports, relocations, TLS, exception data.</td></tr>
+    <tr><td>DataDirectory[16]</td><td>The table of contents. Each entry is a <code>{ RVA, Size }</code> pair pointing to a major PE structure  ; imports, exports, relocations, TLS, exception data.</td></tr>
   </table>
 
   <div class="telemetry">
-    <strong>Signal for defenders:</strong> <code>DllCharacteristics</code> tells you whether the image opts into modern mitigations &mdash; <code>IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE</code> (ASLR), <code>NX_COMPAT</code> (DEP), <code>GUARD_CF</code> (Control Flow Guard), <code>HIGH_ENTROPY_VA</code> (64-bit ASLR). A legitimate modern binary has all of these set; binaries that opt <em>out</em> are either old, niche, or suspicious. ETW's <code>Microsoft-Windows-Kernel-Process</code> and EDR image-load telemetry commonly surface this as part of module load events &mdash; hunt for unsigned modules loaded into signed processes with weak <code>DllCharacteristics</code>.
+    <strong>Signal for defenders:</strong> <code>DllCharacteristics</code> tells you whether the image opts into modern mitigations  ; <code>IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE</code> (ASLR), <code>NX_COMPAT</code> (DEP), <code>GUARD_CF</code> (Control Flow Guard), <code>HIGH_ENTROPY_VA</code> (64-bit ASLR). A legitimate modern binary has all of these set; binaries that opt <em>out</em> are either old, niche, or suspicious. ETW's <code>Microsoft-Windows-Kernel-Process</code> and EDR image-load telemetry commonly surface this as part of module load events  ; hunt for unsigned modules loaded into signed processes with weak <code>DllCharacteristics</code>.
   </div>
 
   <hr class="rule">
@@ -927,7 +927,7 @@ IMAGE_SCN_MEM_EXECUTE   <span class="m">0x20000000</span>   <span class="c">// t
   <p>When the loader maps your binary, each section gets its memory protection derived from these three bits. A typical layout:</p>
 
   <table>
-    <tr><td>.text</td><td>Code. <strong>R-X</strong>. You read instructions from it; the CPU executes from it. You never write to it &mdash; at least not legitimately.</td></tr>
+    <tr><td>.text</td><td>Code. <strong>R-X</strong>. You read instructions from it; the CPU executes from it. You never write to it  ; at least not legitimately.</td></tr>
     <tr><td>.rdata</td><td>Read-only data: import/export tables, string literals, const globals. <strong>R--</strong>.</td></tr>
     <tr><td>.data</td><td>Initialized writable globals. <strong>RW-</strong>. Never X.</td></tr>
     <tr><td>.bss</td><td>Zero-initialized writable globals. Often merged into .data. <strong>RW-</strong>.</td></tr>
@@ -938,13 +938,13 @@ IMAGE_SCN_MEM_EXECUTE   <span class="m">0x20000000</span>   <span class="c">// t
 
   <div class="callout">
     <div class="label">the single most important rule in PE security</div>
-    <p>A section that is both <strong>writable AND executable</strong> (RWX, <code>0xE0000000</code>) is almost never legitimate in a modern compiled binary. Legitimate code is R-X; legitimate data is RW-. Self-modifying code sections &mdash; <code>.text</code> marked RWX &mdash; are a screaming red flag. Packed malware that decrypts its payload in place is the textbook source of RWX sections on disk. Memory pages that become RWX at runtime (via <code>VirtualProtect</code>) are the textbook source at runtime.</p>
+    <p>A section that is both <strong>writable AND executable</strong> (RWX, <code>0xE0000000</code>) is almost never legitimate in a modern compiled binary. Legitimate code is R-X; legitimate data is RW-. Self-modifying code sections  ; <code>.text</code> marked RWX  ; are a screaming red flag. Packed malware that decrypts its payload in place is the textbook source of RWX sections on disk. Memory pages that become RWX at runtime (via <code>VirtualProtect</code>) are the textbook source at runtime.</p>
   </div>
 
   <div class="twin">
     <div class="take red">
       <h5>&rarr; operator's view</h5>
-      <p>Because RWX is a known tell, modern loaders play the <strong>W&oplus;X</strong> game: allocate RW, write the payload, flip to R-X with <code>VirtualProtect</code>, then execute. The page is never simultaneously W and X. This is cheaper than it sounds and defeats lazy RWX scanners &mdash; but leaves the <code>VirtualProtect</code> call itself as the signal.</p>
+      <p>Because RWX is a known tell, modern loaders play the <strong>W&oplus;X</strong> game: allocate RW, write the payload, flip to R-X with <code>VirtualProtect</code>, then execute. The page is never simultaneously W and X. This is cheaper than it sounds and defeats lazy RWX scanners  ; but leaves the <code>VirtualProtect</code> call itself as the signal.</p>
     </div>
     <div class="take blue">
       <h5>&rarr; defender's view</h5>
@@ -973,7 +973,7 @@ IMAGE_SCN_MEM_EXECUTE   <span class="m">0x20000000</span>   <span class="c">// t
     <tr><td>[2] RESOURCE</td><td>Icons, version info, manifests, embedded data.</td></tr>
     <tr><td>[3] EXCEPTION</td><td>x64 unwind info (a table of <code>RUNTIME_FUNCTION</code> entries). Every x64 function must be here or exceptions break.</td></tr>
     <tr><td>[5] BASERELOC</td><td>How to patch absolute addresses if loaded off-base. Essential when ASLR moves the module.</td></tr>
-    <tr><td>[9] TLS</td><td>Thread Local Storage &mdash; and the infamous TLS callbacks that run <em>before</em> the entry point.</td></tr>
+    <tr><td>[9] TLS</td><td>Thread Local Storage  ; and the infamous TLS callbacks that run <em>before</em> the entry point.</td></tr>
     <tr><td>[12] IAT</td><td>The Import Address Table. After binding, the actual function pointers to imported functions live here.</td></tr>
   </table>
 
@@ -983,7 +983,7 @@ IMAGE_SCN_MEM_EXECUTE   <span class="m">0x20000000</span>   <span class="c">// t
   <h2><span class="num">§ 06</span> Imports and exports: how DLLs find each other</h2>
   <p class="sub">If you understand nothing else at runtime, understand these two tables. They are 80% of the attack surface.</p>
 
-  <h3>The export directory &mdash; what a DLL offers</h3>
+  <h3>The export directory  ; what a DLL offers</h3>
 
   <div class="card read">
     <div class="card-head">
@@ -1008,10 +1008,10 @@ IMAGE_SCN_MEM_EXECUTE   <span class="m">0x20000000</span>   <span class="c">// t
   <p>Resolving "where is <code>NtAllocateVirtualMemory</code> inside <code>ntdll.dll</code>" reduces to: find the export directory, walk <code>AddressOfNames</code> until you hit the string, take the index, look it up in <code>AddressOfNameOrdinals</code> to get an ordinal, look <em>that</em> up in <code>AddressOfFunctions</code> to get the RVA. Add the RVA to the DLL's base address. Done. That is <code>GetProcAddress</code>, stripped of ceremony.</p>
 
   <div class="margin">
-    <code>NumberOfFunctions</code> and <code>NumberOfNames</code> differ because <em>some exports are ordinal-only</em> (no name). <code>ws2_32.dll</code> is the famous example &mdash; many winsock functions export by ordinal only. If you write a name-based resolver and forget this, your code silently fails to find those functions. Ask me how I know.
+    <code>NumberOfFunctions</code> and <code>NumberOfNames</code> differ because <em>some exports are ordinal-only</em> (no name). <code>ws2_32.dll</code> is the famous example  ; many winsock functions export by ordinal only. If you write a name-based resolver and forget this, your code silently fails to find those functions. Ask me how I know.
   </div>
 
-  <h3>The import directory &mdash; what a DLL demands</h3>
+  <h3>The import directory  ; what a DLL demands</h3>
 
   <div class="card write">
     <div class="card-head">
@@ -1019,11 +1019,11 @@ IMAGE_SCN_MEM_EXECUTE   <span class="m">0x20000000</span>   <span class="c">// t
       <div class="tags"><span class="pill r">read</span><span class="pill w">write</span></div>
     </div>
 <pre><span class="k">struct</span> _IMAGE_IMPORT_DESCRIPTOR {
-    <span class="t">DWORD</span> <span class="fld">OriginalFirstThunk</span>;   <span class="c">// RVA to INT  (Import Name Table)  &mdash; immutable</span>
+    <span class="t">DWORD</span> <span class="fld">OriginalFirstThunk</span>;   <span class="c">// RVA to INT  (Import Name Table)   ; immutable</span>
     <span class="t">DWORD</span> TimeDateStamp;
     <span class="t">DWORD</span> ForwarderChain;
     <span class="t">DWORD</span> <span class="fld">Name</span>;                 <span class="c">// RVA to name of DLL being imported</span>
-    <span class="t">DWORD</span> <span class="fld">FirstThunk</span>;           <span class="c">// RVA to IAT  (Import Address Table) &mdash; LOADER WRITES HERE</span>
+    <span class="t">DWORD</span> <span class="fld">FirstThunk</span>;           <span class="c">// RVA to IAT  (Import Address Table)  ; LOADER WRITES HERE</span>
 };</pre>
   </div>
 
@@ -1037,7 +1037,7 @@ IAT[]  =  { &amp;"NtAllocateVirtualMemory", &amp;"NtProtectVirtualMemory", ... }
 INT[]  =  { &amp;"NtAllocateVirtualMemory", &amp;"NtProtectVirtualMemory", ... }  <span class="c">// unchanged</span>
 IAT[]  =  { <span class="m">0x7FF8B4A21C30</span>,            <span class="m">0x7FF8B4A22140</span>,             ... }  <span class="c">// real addrs</span></pre>
 
-  <p>The INT (Import Name Table) stays as a list of name pointers &mdash; this is what a disassembler shows you as "this imports function X." The IAT, starting the same way, gets overwritten by the loader with the actual resolved addresses. At runtime, when the .text section calls an imported function, it does so through an indirect jump <em>via the IAT</em>:</p>
+  <p>The INT (Import Name Table) stays as a list of name pointers  ; this is what a disassembler shows you as "this imports function X." The IAT, starting the same way, gets overwritten by the loader with the actual resolved addresses. At runtime, when the .text section calls an imported function, it does so through an indirect jump <em>via the IAT</em>:</p>
 
 <pre>  call qword ptr [rip + __imp_NtAllocateVirtualMemory]   <span class="c">; indirect through IAT entry</span></pre>
 
@@ -1048,7 +1048,7 @@ IAT[]  =  { <span class="m">0x7FF8B4A21C30</span>,            <span class="m">0x
     </div>
     <div class="take blue">
       <h5>&rarr; defender's view &middot; absence is a signal</h5>
-      <p>A process whose IAT <em>does not</em> import <code>NtAllocateVirtualMemory</code>, <code>NtProtectVirtualMemory</code>, or <code>CreateRemoteThread</code> &mdash; but which nevertheless executes those calls &mdash; is doing manual resolution (API hashing, direct syscalls, or both). Tools like <code>pe-sieve</code> and <code>hollows_hunter</code> look for exactly this mismatch between declared imports and actual behavior.</p>
+      <p>A process whose IAT <em>does not</em> import <code>NtAllocateVirtualMemory</code>, <code>NtProtectVirtualMemory</code>, or <code>CreateRemoteThread</code>  ; but which nevertheless executes those calls  ; is doing manual resolution (API hashing, direct syscalls, or both). Tools like <code>pe-sieve</code> and <code>hollows_hunter</code> look for exactly this mismatch between declared imports and actual behavior.</p>
     </div>
   </div>
 
@@ -1058,9 +1058,9 @@ IAT[]  =  { <span class="m">0x7FF8B4A21C30</span>,            <span class="m">0x
   <h2><span class="num">§ 07</span> Relocations and TLS callbacks: the runtime fix-ups</h2>
   <p class="sub">Two small structures that do large things.</p>
 
-  <h3>Base relocations &mdash; patching pointers when the base moves</h3>
+  <h3>Base relocations  ; patching pointers when the base moves</h3>
 
-  <p>A PE is compiled assuming it will load at <code>ImageBase</code>. If that address is already taken &mdash; and with ASLR, it virtually always is &mdash; the loader maps the image somewhere else and then has to go through the image and patch every absolute pointer. The <code>.reloc</code> section tells it where those pointers are.</p>
+  <p>A PE is compiled assuming it will load at <code>ImageBase</code>. If that address is already taken  ; and with ASLR, it virtually always is  ; the loader maps the image somewhere else and then has to go through the image and patch every absolute pointer. The <code>.reloc</code> section tells it where those pointers are.</p>
 
 <pre><span class="k">struct</span> _IMAGE_BASE_RELOCATION {
     <span class="t">DWORD</span> <span class="fld">VirtualAddress</span>;   <span class="c">// RVA of a 4KB page to fix up</span>
@@ -1070,9 +1070,9 @@ IAT[]  =  { <span class="m">0x7FF8B4A21C30</span>,            <span class="m">0x
     <span class="c">//    lower 12 bits = offset within the page</span>
 };</pre>
 
-  <p>The loader computes a <strong>delta</strong> (<code>ActualBase - PreferredImageBase</code>), then walks the relocation blocks, and at each offset inside each page, adds the delta to the 8-byte pointer stored there. A modern x64 binary might have tens of thousands of these. It's bulk work. It's also why DLLs built without <code>/DYNAMICBASE</code> (no <code>.reloc</code>) cannot load if their preferred base is taken &mdash; the loader has no map to fix them up.</p>
+  <p>The loader computes a <strong>delta</strong> (<code>ActualBase - PreferredImageBase</code>), then walks the relocation blocks, and at each offset inside each page, adds the delta to the 8-byte pointer stored there. A modern x64 binary might have tens of thousands of these. It's bulk work. It's also why DLLs built without <code>/DYNAMICBASE</code> (no <code>.reloc</code>) cannot load if their preferred base is taken  ; the loader has no map to fix them up.</p>
 
-  <h3>TLS callbacks &mdash; code that runs before <code>main</code></h3>
+  <h3>TLS callbacks  ; code that runs before <code>main</code></h3>
 
   <div class="card exec">
     <div class="card-head">
@@ -1115,17 +1115,17 @@ IAT[]  =  { <span class="m">0x7FF8B4A21C30</span>,            <span class="m">0x
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
       <div class="q">A PE section has <code>Characteristics = 0xE0000000</code>. What's in it, and why do you care?</div>
-      <div class="a">It's RWX &mdash; readable, writable, <em>and</em> executable. Modern legitimate binaries should never ship with this. It is the classic fingerprint of packed or self-modifying code. Either the author is naive, or the section contains a decryption stub that writes the real payload into itself before jumping there.</div>
+      <div class="a">It's RWX  ; readable, writable, <em>and</em> executable. Modern legitimate binaries should never ship with this. It is the classic fingerprint of packed or self-modifying code. Either the author is naive, or the section contains a decryption stub that writes the real payload into itself before jumping there.</div>
     </div>
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
       <div class="q">Why are <code>SizeOfRawData</code> and <code>VirtualSize</code> often different on the same section?</div>
-      <div class="a"><code>SizeOfRawData</code> is the count of bytes stored on disk, aligned to <code>FileAlignment</code> (<code>0x200</code>). <code>VirtualSize</code> is the count of bytes the section wants in memory. The difference is the zero-filled region (<code>.bss</code>-style data) that doesn't need to be stored on disk &mdash; the loader just allocates zeros. You map <code>VirtualSize</code> bytes; you copy <code>SizeOfRawData</code> bytes into it.</div>
+      <div class="a"><code>SizeOfRawData</code> is the count of bytes stored on disk, aligned to <code>FileAlignment</code> (<code>0x200</code>). <code>VirtualSize</code> is the count of bytes the section wants in memory. The difference is the zero-filled region (<code>.bss</code>-style data) that doesn't need to be stored on disk  ; the loader just allocates zeros. You map <code>VirtualSize</code> bytes; you copy <code>SizeOfRawData</code> bytes into it.</div>
     </div>
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
       <div class="q">What is the difference between the INT and the IAT, before and after the loader runs?</div>
-      <div class="a">Before binding: both arrays contain RVAs to the imported function names. After binding: the INT (Import Name Table, <code>OriginalFirstThunk</code>) still contains name RVAs &mdash; it is the immutable record of what was imported. The IAT (Import Address Table, <code>FirstThunk</code>) has been overwritten by the loader with the resolved absolute addresses. At runtime, calls go indirectly through the IAT.</div>
+      <div class="a">Before binding: both arrays contain RVAs to the imported function names. After binding: the INT (Import Name Table, <code>OriginalFirstThunk</code>) still contains name RVAs  ; it is the immutable record of what was imported. The IAT (Import Address Table, <code>FirstThunk</code>) has been overwritten by the loader with the resolved absolute addresses. At runtime, calls go indirectly through the IAT.</div>
     </div>
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
@@ -1145,7 +1145,7 @@ IAT[]  =  { <span class="m">0x7FF8B4A21C30</span>,            <span class="m">0x
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
       <div class="q">What does <code>DllCharacteristics</code> tell you, and what's the red flag?</div>
-      <div class="a">It's a bitmask describing which process-level mitigations the binary opts into &mdash; <code>DYNAMIC_BASE</code> (ASLR), <code>NX_COMPAT</code> (DEP), <code>GUARD_CF</code> (CFG), <code>HIGH_ENTROPY_VA</code> (64-bit ASLR). Any modern compiled binary should have all of these set. A binary that opts out &mdash; particularly one missing <code>DYNAMIC_BASE</code> &mdash; is either ancient, deliberately weakened, or suspicious.</div>
+      <div class="a">It's a bitmask describing which process-level mitigations the binary opts into  ; <code>DYNAMIC_BASE</code> (ASLR), <code>NX_COMPAT</code> (DEP), <code>GUARD_CF</code> (CFG), <code>HIGH_ENTROPY_VA</code> (64-bit ASLR). Any modern compiled binary should have all of these set. A binary that opts out  ; particularly one missing <code>DYNAMIC_BASE</code>  ; is either ancient, deliberately weakened, or suspicious.</div>
     </div>
   </div>
 
@@ -1153,13 +1153,13 @@ IAT[]  =  { <span class="m">0x7FF8B4A21C30</span>,            <span class="m">0x
   <hr class="rule">
 
   <h2><span class="num">§ 09</span> Closing thought</h2>
-  <p>The PE format is baroque, but it is not deep. Once you internalize the disk/memory split, the role of <code>e_lfanew</code>, and the fact that sections carry literal R/W/X flags, the rest is table-lookup. Every exotic technique you will read about &mdash; reflective loading, process hollowing, manual mapping, IAT hooking, module stomping, API hashing, DLL unhooking &mdash; is a recombination of operations on the structures we just covered. You are not learning eight separate techniques. You are learning one structure well enough that eight techniques become obvious.</p>
+  <p>The PE format is baroque, but it is not deep. Once you internalize the disk/memory split, the role of <code>e_lfanew</code>, and the fact that sections carry literal R/W/X flags, the rest is table-lookup. Every exotic technique you will read about  ; reflective loading, process hollowing, manual mapping, IAT hooking, module stomping, API hashing, DLL unhooking  ; is a recombination of operations on the structures we just covered. You are not learning eight separate techniques. You are learning one structure well enough that eight techniques become obvious.</p>
 
-  <p>Next in the notebook: <em class="pen">Processes &amp; Threads &mdash; the PEB, the TEB, and what lives inside a process after the loader is done</em>. We pick up exactly where <code>e_lfanew</code> left us: with a mapped image in memory, and a doubly-linked list of them starting to form in the PEB's Ldr structure.</p>
+  <p>Next in the notebook: <em class="pen">Processes &amp; Threads  ; the PEB, the TEB, and what lives inside a process after the loader is done</em>. We pick up exactly where <code>e_lfanew</code> left us: with a mapped image in memory, and a doubly-linked list of them starting to form in the PEB's Ldr structure.</p>
 
   <footer class="end">
     <div>filed under &middot; windows internals &middot; pe format &middot; offensive &amp; detection</div>
-    <div class="sig">&mdash; blacksunCUBE</div>
+    <div class="sig"> ; blacksunCUBE</div>
       </footer>
     </div>
 <script src="/assets/js/notebook-guard.js" defer></script>
