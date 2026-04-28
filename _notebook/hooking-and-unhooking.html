@@ -753,10 +753,10 @@ description: "How EDRs install their visibility into your process, and the five 
   </header>
 
   <h1>Hooking &amp; Unhooking,<br><em>or: how the EDR moves into your house, and how an attacker tries to evict it.</em></h1>
-  <p class="dek">A walk through the bytes that get rewritten when a security product loads, the ways those bytes get put there, and the five families of techniques attackers use to clean them up &mdash; all with the detection signature each one leaves behind.</p>
+  <p class="dek">A walk through the bytes that get rewritten when a security product loads, the ways those bytes get put there, and the five families of techniques attackers use to clean them up  all with the detection signature each one leaves behind.</p>
   <div class="byline">blacksun<span style="color:var(--exec);">CUBE</span> field notebook &middot; vol. 06 &middot; <em>builds on vol. 04 (loader) &amp; vol. 05 (syscalls)</em></div>
 
-  <p>Vol. 05 ended with this claim: <em>by the end of vol. 06, you should be able to look at any process and tell, by reading <code>ntdll</code>'s first 16 bytes, whether an EDR has visited.</em> That's the goal. By the time you finish this volume, you should also know <em>which</em> EDR pattern was used, what the EDR's DLL is doing on each call, and what would happen if you tried to unhook &mdash; including the detection signal that would fire as you did.</p>
+  <p>Vol. 05 ended with this claim: <em>by the end of vol. 06, you should be able to look at any process and tell, by reading <code>ntdll</code>'s first 16 bytes, whether an EDR has visited.</em> That's the goal. By the time you finish this volume, you should also know <em>which</em> EDR pattern was used, what the EDR's DLL is doing on each call, and what would happen if you tried to unhook  including the detection signal that would fire as you did.</p>
 
   <p>Three concrete things matter here:</p>
 
@@ -790,11 +790,11 @@ description: "How EDRs install their visibility into your process, and the five 
 
   <!-- ========== § 01 ========== -->
   <h2><span class="num">§ 01</span> What a hook actually is</h2>
-  <p class="sub">A small, deliberate corruption of function prologue bytes &mdash; nothing more, nothing less.</p>
+  <p class="sub">A small, deliberate corruption of function prologue bytes  nothing more, nothing less.</p>
 
   <p>Strip away every blog post and conference talk; a user-mode API hook is one thing: <em>the first few bytes of a function in a loaded DLL have been overwritten with a jump to somewhere else</em>. Everything in the next 60 pages of this notebook is a variation on that idea.</p>
 
-  <p>The function being hooked is almost always in <code>ntdll.dll</code>, because that's where the syscall stubs live (vol. 05) and that's the last user-mode chokepoint before kernel transition. The <em>somewhere else</em> the hook jumps to is an analysis routine inside the EDR's own DLL, also loaded into the process. After the analysis routine decides "this call is safe", it jumps to a <strong>trampoline</strong> &mdash; a small chunk of memory the EDR allocated, containing the original bytes it overwrote, followed by a jump back into the original function past the patched bytes.</p>
+  <p>The function being hooked is almost always in <code>ntdll.dll</code>, because that's where the syscall stubs live (vol. 05) and that's the last user-mode chokepoint before kernel transition. The <em>somewhere else</em> the hook jumps to is an analysis routine inside the EDR's own DLL, also loaded into the process. After the analysis routine decides "this call is safe", it jumps to a <strong>trampoline</strong>  a small chunk of memory the EDR allocated, containing the original bytes it overwrote, followed by a jump back into the original function past the patched bytes.</p>
 
   <p>That's the whole mechanism. <em>Patch + trampoline.</em> Everything else is engineering.</p>
 
@@ -822,7 +822,7 @@ description: "How EDRs install their visibility into your process, and the five 
     </div>
   </div>
 
-  <p>Notice what didn't change: the <code>syscall</code> instruction itself, and the bytes after the patch. The first 5 bytes of the stub are gone &mdash; replaced with a single <code>JMP rel32</code> (opcode <code>E9</code>, plus 4-byte signed offset to the EDR's analysis routine). The original 5 bytes (<code>4c 8b d1 b8 18</code>) are now in the EDR's trampoline elsewhere in memory.</p>
+  <p>Notice what didn't change: the <code>syscall</code> instruction itself, and the bytes after the patch. The first 5 bytes of the stub are gone  replaced with a single <code>JMP rel32</code> (opcode <code>E9</code>, plus 4-byte signed offset to the EDR's analysis routine). The original 5 bytes (<code>4c 8b d1 b8 18</code>) are now in the EDR's trampoline elsewhere in memory.</p>
 
   <p>When code calls <code>NtAllocateVirtualMemory</code>:</p>
 
@@ -835,20 +835,20 @@ description: "How EDRs install their visibility into your process, and the five 
   </ol>
 
   <div class="margin">
-    The <code>4c 8b d1 b8 18 00 00 00</code> sequence at the top of every <code>Nt*</code> function is not a coincidence &mdash; it's the same 8-byte pattern (<code>mov r10, rcx</code> + <code>mov eax, ssn</code>) that vol. 05 introduced. That 8-byte regularity is precisely what lets Hell's Gate find SSNs without symbols, and precisely what lets a hook detector find the patched functions.
+    The <code>4c 8b d1 b8 18 00 00 00</code> sequence at the top of every <code>Nt*</code> function is not a coincidence  it's the same 8-byte pattern (<code>mov r10, rcx</code> + <code>mov eax, ssn</code>) that vol. 05 introduced. That 8-byte regularity is precisely what lets Hell's Gate find SSNs without symbols, and precisely what lets a hook detector find the patched functions.
   </div>
 
   <hr class="rule">
 
   <!-- ========== § 02 ========== -->
   <h2><span class="num">§ 02</span> Three flavors of inline hook</h2>
-  <p class="sub">Same idea, three byte-level shapes &mdash; learn them and you can recognize any EDR's patch on sight.</p>
+  <p class="sub">Same idea, three byte-level shapes  learn them and you can recognize any EDR's patch on sight.</p>
 
-  <h3>Flavor 1 &mdash; Five-byte relative jump (the classic)</h3>
+  <h3>Flavor 1  Five-byte relative jump (the classic)</h3>
 
   <div class="card exec">
     <div class="card-head">
-      <span class="type-name">JMP rel32 &mdash; opcode E9</span>
+      <span class="type-name">JMP rel32  opcode E9</span>
       <div class="tags"><span class="pill x">execute</span></div>
     </div>
     <p class="gloss">5 bytes. Reaches anywhere within ±2 GiB of the patch site. The default for AVs and lightweight EDRs.</p>
@@ -865,11 +865,11 @@ description: "How EDRs install their visibility into your process, and the five 
 
   <p>This is what Microsoft Detours uses, what most commercial AVs use, and what Hell's Gate / Halo's Gate detect by checking for byte <code>0xE9</code> at offset 0 of an <code>Nt*</code> stub. <em>If you see <code>E9</code> at the prologue of any <code>Nt*</code> function, the function is hooked.</em></p>
 
-  <h3>Flavor 2 &mdash; Fourteen-byte absolute jump (used when ±2 GiB isn't enough)</h3>
+  <h3>Flavor 2  Fourteen-byte absolute jump (used when ±2 GiB isn't enough)</h3>
 
   <div class="card exec">
     <div class="card-head">
-      <span class="type-name">FF 25 + qword &mdash; absolute indirect jump</span>
+      <span class="type-name">FF 25 + qword  absolute indirect jump</span>
       <div class="tags"><span class="pill x">execute</span></div>
     </div>
     <p class="gloss">14 bytes. Reaches anywhere in 64-bit space. More complete coverage of <code>Nt*</code> stubs that have multiple complete instructions in the first 14 bytes.</p>
@@ -882,9 +882,9 @@ description: "How EDRs install their visibility into your process, and the five 
 ;    FF E0                       ; jmp rax</span></pre>
   </div>
 
-  <p>Some EDRs use this when they want to be sure they overwrite enough bytes to capture every possible first instruction (the prologue of <code>NtAllocateVirtualMemory</code> includes a <code>test</code> with an immediate operand &mdash; depending on version, that might be 9 or 10 bytes by itself). Recognizable by <code>FF 25</code> or <code>48 B8</code> at offset 0.</p>
+  <p>Some EDRs use this when they want to be sure they overwrite enough bytes to capture every possible first instruction (the prologue of <code>NtAllocateVirtualMemory</code> includes a <code>test</code> with an immediate operand  depending on version, that might be 9 or 10 bytes by itself). Recognizable by <code>FF 25</code> or <code>48 B8</code> at offset 0.</p>
 
-  <h3>Flavor 3 &mdash; Single-instruction replacement ("atomic" hook)</h3>
+  <h3>Flavor 3  Single-instruction replacement ("atomic" hook)</h3>
 
   <p>Rarer, but worth knowing: some EDRs replace exactly <em>one</em> middle instruction with the jump. Specifically, the <code>mov eax, &lt;SSN&gt;</code> instruction at offset 3 (5 bytes itself) is replaced with the <code>E9</code> jump. The advantage is atomicity: a single 5-byte instruction is rewritten as a single 5-byte instruction, no torn-write window. The first 3 bytes (<code>4c 8b d1</code>) survive.</p>
 
@@ -898,7 +898,7 @@ description: "How EDRs install their visibility into your process, and the five 
 ; via its 4C 8B D1 E9 ... heuristic.</span></pre>
 
   <div class="telemetry">
-    <strong>Detection counterpart:</strong> a hook scanner walks every <code>Nt*</code> export and reads bytes at offsets 0 and 3. The unhooked stub starts with <code>4c 8b d1 b8</code>; if those 4 bytes don't match, something has been rewritten. False-positive rate is essentially zero on production Windows because Microsoft's syscall stubs follow this exact pattern. <strong>This is also exactly what Halo's / Tartarus' Gate use to recognize hooks &mdash; meaning offensive and defensive parties have the same detection logic running in the same process at the same time.</strong>
+    <strong>Detection counterpart:</strong> a hook scanner walks every <code>Nt*</code> export and reads bytes at offsets 0 and 3. The unhooked stub starts with <code>4c 8b d1 b8</code>; if those 4 bytes don't match, something has been rewritten. False-positive rate is essentially zero on production Windows because Microsoft's syscall stubs follow this exact pattern. <strong>This is also exactly what Halo's / Tartarus' Gate use to recognize hooks  meaning offensive and defensive parties have the same detection logic running in the same process at the same time.</strong>
   </div>
 
   <hr class="rule">
@@ -907,25 +907,25 @@ description: "How EDRs install their visibility into your process, and the five 
   <h2><span class="num">§ 03</span> IAT &amp; EAT hooks: the alternative no-one really uses anymore</h2>
   <p class="sub">An older approach worth knowing because it occasionally still appears in the wild.</p>
 
-  <p>Vol. 02 introduced the <strong>Import Address Table</strong> (IAT): an array of function pointers the loader fills in with the resolved addresses of every imported function, so when your code calls <code>VirtualAlloc</code>, the actual jump target is read from <code>IAT[VirtualAlloc]</code>. An <strong>IAT hook</strong> replaces that pointer with one to your inspection routine. No function bytes are modified anywhere &mdash; the original <code>VirtualAlloc</code> is untouched. You just intercept the dispatch layer above it.</p>
+  <p>Vol. 02 introduced the <strong>Import Address Table</strong> (IAT): an array of function pointers the loader fills in with the resolved addresses of every imported function, so when your code calls <code>VirtualAlloc</code>, the actual jump target is read from <code>IAT[VirtualAlloc]</code>. An <strong>IAT hook</strong> replaces that pointer with one to your inspection routine. No function bytes are modified anywhere  the original <code>VirtualAlloc</code> is untouched. You just intercept the dispatch layer above it.</p>
 
   <p>The <strong>Export Address Table</strong> (EAT) is the same idea on the producer side: each exported function in a DLL has its address listed in the EAT. Patching the EAT means anyone who later calls <code>GetProcAddress</code> gets your address, not the real one.</p>
 
   <table>
     <tr><th>Approach</th><th>What gets modified</th><th>What it catches</th><th>Why it's mostly obsolete</th></tr>
-    <tr><td>IAT hook</td><td>Function pointer in your module's import table</td><td>Calls that go through that specific import</td><td>Only catches that one importing module. Direct calls via <code>GetProcAddress</code> &mdash; or any code that bypasses the IAT &mdash; sail through. EDRs need universal coverage; inline hooks at the source DLL provide it.</td></tr>
+    <tr><td>IAT hook</td><td>Function pointer in your module's import table</td><td>Calls that go through that specific import</td><td>Only catches that one importing module. Direct calls via <code>GetProcAddress</code>  or any code that bypasses the IAT  sail through. EDRs need universal coverage; inline hooks at the source DLL provide it.</td></tr>
     <tr><td>EAT hook</td><td>Function pointer in source DLL's export table</td><td>Future <code>GetProcAddress</code> lookups</td><td>Catches nothing already-resolved. Static IAT entries (resolved at load time) sail through. Only useful for late-bound calls.</td></tr>
   </table>
 
-  <p>You'll still see IAT hooks in some EDR-internal contexts (e.g., for non-syscall callbacks), and certain DLP/insider-threat tools use them. For the syscall coverage problem &mdash; "see every <code>Nt*</code> call in this process" &mdash; inline hooks at <code>ntdll</code> dominate because they catch <em>all</em> callers in one shot.</p>
+  <p>You'll still see IAT hooks in some EDR-internal contexts (e.g., for non-syscall callbacks), and certain DLP/insider-threat tools use them. For the syscall coverage problem  "see every <code>Nt*</code> call in this process"  inline hooks at <code>ntdll</code> dominate because they catch <em>all</em> callers in one shot.</p>
 
   <hr class="rule">
 
   <!-- ========== § 04 ========== -->
   <h2><span class="num">§ 04</span> Hardware-breakpoint hooks (no patch at all)</h2>
-  <p class="sub">An EDR-side and offense-side technique. The bytes never change &mdash; the CPU's debug machinery does the redirect.</p>
+  <p class="sub">An EDR-side and offense-side technique. The bytes never change  the CPU's debug machinery does the redirect.</p>
 
-  <p>The CPU has 4 hardware breakpoint registers: <code>DR0</code> through <code>DR3</code>, with control via <code>DR6</code>/<code>DR7</code>. Each can hold a linear address; when execution (or read/write, depending on configuration) reaches that address, the CPU raises a <code>#DB</code> debug exception <em>before</em> the instruction at that address executes. If a Vectored Exception Handler is registered, it catches the exception, inspects the CPU context (which the OS hands to the handler, including the volatile registers), modifies what it wants, and returns &mdash; control resumes wherever <code>RIP</code> now points.</p>
+  <p>The CPU has 4 hardware breakpoint registers: <code>DR0</code> through <code>DR3</code>, with control via <code>DR6</code>/<code>DR7</code>. Each can hold a linear address; when execution (or read/write, depending on configuration) reaches that address, the CPU raises a <code>#DB</code> debug exception <em>before</em> the instruction at that address executes. If a Vectored Exception Handler is registered, it catches the exception, inspects the CPU context (which the OS hands to the handler, including the volatile registers), modifies what it wants, and returns  control resumes wherever <code>RIP</code> now points.</p>
 
   <p>This gives you a hook that <em>doesn't touch the target's bytes at all</em>. The function looks pristine to a memory-integrity scanner. The only artifact is in the thread's debug registers and in the registered exception handler.</p>
 
@@ -949,12 +949,12 @@ description: "How EDRs install their visibility into your process, and the five 
 
   <h3>The 2024 evolution: VEH²</h3>
 
-  <p>The standard pattern above leaks a major IOC: <code>SetThreadContext</code> writing debug registers transitions through <code>NtSetContextThread</code> in the kernel, which in turn fires events on the <code>Microsoft-Windows-Kernel-Audit-API-Calls</code> ETW provider. Defenders watch for that. CrowdStrike researchers (Onofri &amp; Sonawane, BlackHat MEA 2023) demonstrated <strong>VEH²</strong>: <em>register the VEH, trigger your own exception, and modify the debug registers <em>from inside the handler</em>, where the OS has already given you a writeable <code>CONTEXT</code> struct &mdash; so no <code>SetThreadContext</code> call is needed.</em></p>
+  <p>The standard pattern above leaks a major IOC: <code>SetThreadContext</code> writing debug registers transitions through <code>NtSetContextThread</code> in the kernel, which in turn fires events on the <code>Microsoft-Windows-Kernel-Audit-API-Calls</code> ETW provider. Defenders watch for that. CrowdStrike researchers (Onofri &amp; Sonawane, BlackHat MEA 2023) demonstrated <strong>VEH²</strong>: <em>register the VEH, trigger your own exception, and modify the debug registers <em>from inside the handler</em>, where the OS has already given you a writeable <code>CONTEXT</code> struct  so no <code>SetThreadContext</code> call is needed.</em></p>
 
   <p>That single change makes the technique substantially harder to spot. The <code>CONTEXT</code> struct passed to the VEH has volatile <code>Dr0</code>–<code>Dr7</code> fields; modifying them inside the handler is invisible to the kernel-audit provider that watches <code>NtSetContextThread</code>. fluxsec and others have published Rust ports of the same pattern (2024).</p>
 
   <div class="margin">
-    Hardware-breakpoint hooks are a <em>hard</em> capability for both sides. Offensively, they let you intercept individual function calls without modifying any DLL bytes. Defensively, EDRs use the same primitive in reverse &mdash; setting hardware breakpoints on <code>syscall</code> instructions inside <code>ntdll</code> to catch indirect-syscall callers (<a style="color:var(--tele);">EvilBytecode/Detecting-Indirect-Syscalls, 2025</a>). Same instruction, different team. As always with these chapters: the same primitive serves whoever installs it first.
+    Hardware-breakpoint hooks are a <em>hard</em> capability for both sides. Offensively, they let you intercept individual function calls without modifying any DLL bytes. Defensively, EDRs use the same primitive in reverse  setting hardware breakpoints on <code>syscall</code> instructions inside <code>ntdll</code> to catch indirect-syscall callers (<a style="color:var(--tele);">EvilBytecode/Detecting-Indirect-Syscalls, 2025</a>). Same instruction, different team. As always with these chapters: the same primitive serves whoever installs it first.
   </div>
 
   <hr class="rule">
@@ -963,7 +963,7 @@ description: "How EDRs install their visibility into your process, and the five 
   <h2><span class="num">§ 05</span> How EDR DLLs actually arrive in your process</h2>
   <p class="sub">A kernel callback fires before your <code>main</code> runs, queues an APC, and the rest is inevitable.</p>
 
-  <p>The EDR's hooks live in a DLL. That DLL has to be in your process before any code you care about runs &mdash; otherwise the unhooked window between <code>main</code> and DLL injection is exactly where malware would do all its work. Modern EDRs solve this through the <code>PsSetCreateProcessNotifyRoutine(Ex)</code> + <code>PsSetLoadImageNotifyRoutine</code> kernel callbacks (vol. 04), combined with a kernel-to-user APC.</p>
+  <p>The EDR's hooks live in a DLL. That DLL has to be in your process before any code you care about runs  otherwise the unhooked window between <code>main</code> and DLL injection is exactly where malware would do all its work. Modern EDRs solve this through the <code>PsSetCreateProcessNotifyRoutine(Ex)</code> + <code>PsSetLoadImageNotifyRoutine</code> kernel callbacks (vol. 04), combined with a kernel-to-user APC.</p>
 
   <div class="sequence">
     <div class="caption">EDR DLL injection &middot; canonical sequence (kernel callback → APC → loader)</div>
@@ -1014,13 +1014,13 @@ description: "How EDRs install their visibility into your process, and the five 
     </div>
   </div>
 
-  <p>Key insight: between step 5 and step 8, there's a <em>real</em> window of milliseconds during which <code>ntdll</code> is loaded but not yet hooked. <em>This is the window Perun's Fart, EDR-Preloading, and Early Cascade Injection all target.</em> If you can get <em>your</em> code to execute in this window &mdash; via APC injection earlier than the EDR's APC, or via a TLS callback in the EXE &mdash; you can capture a clean copy of <code>ntdll</code>, or stop the EDR DLL from loading at all.</p>
+  <p>Key insight: between step 5 and step 8, there's a <em>real</em> window of milliseconds during which <code>ntdll</code> is loaded but not yet hooked. <em>This is the window Perun's Fart, EDR-Preloading, and Early Cascade Injection all target.</em> If you can get <em>your</em> code to execute in this window  via APC injection earlier than the EDR's APC, or via a TLS callback in the EXE  you can capture a clean copy of <code>ntdll</code>, or stop the EDR DLL from loading at all.</p>
 
   <h3>The arms race in process startup</h3>
 
   <p>This is why the offensive research community spent 2023–2025 attacking the startup race. <strong>Outflank's Early Cascade Injection</strong> (October 2024) exploited <code>LdrLoadDll</code> internals during process creation to land before the EDR's APC fired. <strong>MalwareTech's EDR-Preloading</strong> (February 2024) hooked <code>KiUserApcDispatcher</code> in a parent-spawned suspended child to neutralize the EDR's incoming APC. Each technique targets one of the steps in the table above.</p>
 
-  <p>Modern EDRs respond by registering their callback as <em>early</em> as possible (kernel autoload at boot, hooks installed in the very first APC slot), and by having their kernel driver inject hooks <em>directly</em> from kernel mode if the user-mode APC racing fails. fluxsec's "Sanctum" research-EDR (2024) demonstrates the kernel-to-user APC path with shellcode that calls <code>LdrLoadDll</code> &mdash; the same pattern used by 0xPrimo's <code>KMDllInjector</code>.</p>
+  <p>Modern EDRs respond by registering their callback as <em>early</em> as possible (kernel autoload at boot, hooks installed in the very first APC slot), and by having their kernel driver inject hooks <em>directly</em> from kernel mode if the user-mode APC racing fails. fluxsec's "Sanctum" research-EDR (2024) demonstrates the kernel-to-user APC path with shellcode that calls <code>LdrLoadDll</code>  the same pattern used by 0xPrimo's <code>KMDllInjector</code>.</p>
 
   <hr class="rule">
 
@@ -1034,7 +1034,7 @@ description: "How EDRs install their visibility into your process, and the five 
     <div class="technique t1">
       <div class="name">1. Refresh from disk <span class="src">— ired.team / classic, 2019+</span></div>
       <div class="desc">Open <code>C:\Windows\System32\ntdll.dll</code>, map it as a section, copy the clean <code>.text</code> bytes over the hooked ones in your loaded <code>ntdll</code>. Original technique. Conceptually simple, widely copy-pasted.</div>
-      <div class="tradeoff"><strong>Trade-off:</strong> opens a file handle to <code>ntdll.dll</code> from a non-system process &mdash; high-fidelity IOC. <code>NtCreateSection</code> with <code>SEC_IMAGE</code> on <code>ntdll</code> is logged via ETW. EDRs with file-access correlation flag this immediately. Also leaves two copies of <code>ntdll</code> in memory if not properly unmapped. <strong>Detection: very easy.</strong></div>
+      <div class="tradeoff"><strong>Trade-off:</strong> opens a file handle to <code>ntdll.dll</code> from a non-system process  high-fidelity IOC. <code>NtCreateSection</code> with <code>SEC_IMAGE</code> on <code>ntdll</code> is logged via ETW. EDRs with file-access correlation flag this immediately. Also leaves two copies of <code>ntdll</code> in memory if not properly unmapped. <strong>Detection: very easy.</strong></div>
     </div>
 
     <div class="technique t2">
@@ -1051,14 +1051,14 @@ description: "How EDRs install their visibility into your process, and the five 
 
     <div class="technique t4">
       <div class="name">4. Process forking / cloning <span class="src">— reprgm Attack of the Clones, 2023</span></div>
-      <div class="desc">Use <code>NtCreateProcessEx</code> to clone the current process. The clone has no threads (so process/thread kernel callbacks don't fire), is invisible in Task Manager, and inherits the parent's memory map &mdash; including any clean <code>ntdll</code>. Copy <code>.text</code> from the clone, terminate it, profit.</div>
+      <div class="desc">Use <code>NtCreateProcessEx</code> to clone the current process. The clone has no threads (so process/thread kernel callbacks don't fire), is invisible in Task Manager, and inherits the parent's memory map  including any clean <code>ntdll</code>. Copy <code>.text</code> from the clone, terminate it, profit.</div>
       <div class="tradeoff"><strong>Trade-off:</strong> still requires writing to your own <code>ntdll!.text</code>, which means <code>VirtualProtect</code> on a non-private region. ETW-TI's <code>PROTECTVM_LOCAL</code> event fires. <strong>Detection: harder than #1–3 at the kernel-callback layer, but the protect-and-write pattern remains the chokepoint.</strong></div>
     </div>
 
     <div class="technique t5">
       <div class="name">5. Selective in-memory unhook <span class="src">— S12 Dark Development, 2025</span></div>
       <div class="desc">Combines #3 / #4 with surgical replacement: instead of overwriting the entire <code>.text</code> section, identify only the hooked stubs (offset-0 byte <code>0xE9</code> or <code>0xFF</code>) and copy only those individual 23-byte syscall prologues from the clean copy. Less memory traffic, smaller telemetry footprint, optionally restoring hooks before exit.</div>
-      <div class="tradeoff"><strong>Trade-off:</strong> still requires <code>NtProtectVirtualMemory</code> on the hooked region. Reduces but doesn't eliminate the patching IOC. State of the art for 2025/2026 detection-aware loaders. <strong>Detection: hardest of the five &mdash; the protection change is smaller and the write is brief, but ETW-TI still observes it.</strong></div>
+      <div class="tradeoff"><strong>Trade-off:</strong> still requires <code>NtProtectVirtualMemory</code> on the hooked region. Reduces but doesn't eliminate the patching IOC. State of the art for 2025/2026 detection-aware loaders. <strong>Detection: hardest of the five  the protection change is smaller and the write is brief, but ETW-TI still observes it.</strong></div>
     </div>
   </div>
 
@@ -1066,7 +1066,7 @@ description: "How EDRs install their visibility into your process, and the five 
 
   <div class="callout">
     <div class="label">honest assessment for 2026</div>
-    <p>Against legacy AV and EDRs that rely primarily on user-mode hooks, all five unhook families work. Against Defender for Endpoint, CrowdStrike Falcon, SentinelOne, Elastic Defend &mdash; products that deemphasize user-mode hooks in favor of kernel callbacks, ETW-TI, and call-stack analysis &mdash; <em>unhooking does almost nothing on its own</em>. The hwbp/NTDLL-Unhook README puts it bluntly: "Advanced EDRs like Microsoft Defender for Endpoint and Elastic don't even use usermode hooks anymore since they rely on kernel callbacks and ETW telemetry, so unhooking does literally nothing against them." This is true. Modern offensive operations against mature EDRs combine unhooking with call-stack spoofing (vol. 05) and careful telemetry awareness.</p>
+    <p>Against legacy AV and EDRs that rely primarily on user-mode hooks, all five unhook families work. Against Defender for Endpoint, CrowdStrike Falcon, SentinelOne, Elastic Defend  products that deemphasize user-mode hooks in favor of kernel callbacks, ETW-TI, and call-stack analysis  <em>unhooking does almost nothing on its own</em>. The hwbp/NTDLL-Unhook README puts it bluntly: "Advanced EDRs like Microsoft Defender for Endpoint and Elastic don't even use usermode hooks anymore since they rely on kernel callbacks and ETW telemetry, so unhooking does literally nothing against them." This is true. Modern offensive operations against mature EDRs combine unhooking with call-stack spoofing (vol. 05) and careful telemetry awareness.</p>
   </div>
 
   <hr class="rule">
@@ -1076,13 +1076,13 @@ description: "How EDRs install their visibility into your process, and the five 
   <p class="sub">Five chokepoints, each with a clear telemetry signature.</p>
 
   <h3>1. Hook-integrity hashing</h3>
-  <p>The simplest defensive primitive: at DLL-load time, after the EDR has installed its own hooks, take a SHA-256 of the <code>.text</code> section of <code>ntdll</code>. Periodically rehash and compare. Any change &mdash; including unhooking back to the original bytes &mdash; produces a different hash. fluxsec's research-EDR (2024) implements exactly this with a Rust thread that hashes every few seconds. <strong>Detection cost: trivial. False-positive rate: zero, because nothing legitimate modifies <code>ntdll!.text</code> after process startup.</strong></p>
+  <p>The simplest defensive primitive: at DLL-load time, after the EDR has installed its own hooks, take a SHA-256 of the <code>.text</code> section of <code>ntdll</code>. Periodically rehash and compare. Any change  including unhooking back to the original bytes  produces a different hash. fluxsec's research-EDR (2024) implements exactly this with a Rust thread that hashes every few seconds. <strong>Detection cost: trivial. False-positive rate: zero, because nothing legitimate modifies <code>ntdll!.text</code> after process startup.</strong></p>
 
   <h3>2. ETW-TI <code>PROTECTVM_LOCAL</code> (event ID 7)</h3>
   <p>Every <code>NtProtectVirtualMemory</code> call against a region inside <code>ntdll</code> with target protection <code>PAGE_EXECUTE_READWRITE</code> (or <code>PAGE_EXECUTE_WRITECOPY</code>) fires a <code>PROTECTVM_LOCAL</code> event on the Threat-Intelligence ETW provider. Jonathan Johnson published the canonical analysis (June 2024). The event includes: process ID, target base address, region size, old protection, new protection. <em>This is the chokepoint that makes all five unhook families detectable.</em></p>
 
   <h3>3. <code>SetThreadContext</code> on debug registers</h3>
-  <p>For VEH-based hardware-breakpoint hooks (§ 04), the conventional pattern uses <code>NtSetContextThread</code> to write <code>Dr0</code>–<code>Dr7</code>. This fires events on <code>Microsoft-Windows-Kernel-Audit-API-Calls</code>. CrowdStrike's VEH² research bypasses this specific telemetry, but the bypass itself produces other artifacts &mdash; namely, an exception being raised intentionally inside the process, which is itself trackable via the same audit provider's exception events.</p>
+  <p>For VEH-based hardware-breakpoint hooks (§ 04), the conventional pattern uses <code>NtSetContextThread</code> to write <code>Dr0</code>–<code>Dr7</code>. This fires events on <code>Microsoft-Windows-Kernel-Audit-API-Calls</code>. CrowdStrike's VEH² research bypasses this specific telemetry, but the bypass itself produces other artifacts  namely, an exception being raised intentionally inside the process, which is itself trackable via the same audit provider's exception events.</p>
 
   <h3>4. Call-stack analysis on <code>NtProtectVirtualMemory</code></h3>
   <p>Even if the protect call is made via a direct syscall to evade user-mode hooks, kernel-side ETW callstack capture (Elastic 8.8+) records the stack. A <code>NtProtectVirtualMemory</code> targeting <code>ntdll</code>'s <code>.text</code> section, called from a stack frame that doesn't end in <code>ntdll</code> or <code>kernelbase</code>, is high-confidence malicious.</p>
@@ -1104,7 +1104,7 @@ description: "How EDRs install their visibility into your process, and the five 
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
       <div class="q">In bytes, what does a typical 5-byte inline hook on <code>NtAllocateVirtualMemory</code> look like, and where do the original bytes go?</div>
-      <div class="a">The first 5 bytes of the function (<code>4c 8b d1 b8 18</code>: <code>mov r10, rcx</code> + start of <code>mov eax, 18h</code>) are overwritten with <code>E9 &lt;rel32&gt;</code> &mdash; a 5-byte relative jump to the EDR's analysis routine. The original 5 bytes are preserved in a separate memory region called the trampoline, allocated by the EDR. After the analysis routine inspects the call, it jumps to the trampoline, which executes the original bytes and then jumps back to <code>NtAllocateVirtualMemory + 5</code> to continue normal execution.</div>
+      <div class="a">The first 5 bytes of the function (<code>4c 8b d1 b8 18</code>: <code>mov r10, rcx</code> + start of <code>mov eax, 18h</code>) are overwritten with <code>E9 &lt;rel32&gt;</code>  a 5-byte relative jump to the EDR's analysis routine. The original 5 bytes are preserved in a separate memory region called the trampoline, allocated by the EDR. After the analysis routine inspects the call, it jumps to the trampoline, which executes the original bytes and then jumps back to <code>NtAllocateVirtualMemory + 5</code> to continue normal execution.</div>
     </div>
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
@@ -1123,8 +1123,8 @@ description: "How EDRs install their visibility into your process, and the five 
     </div>
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
-      <div class="q">Walk through how an EDR DLL gets into a brand-new process &mdash; what fires when?</div>
-      <div class="a">(1) Parent calls <code>CreateProcess</code>. (2) Kernel builds the new EPROCESS. (3) <code>PsSetCreateProcessNotifyRoutineEx</code> callback fires &mdash; the EDR driver receives notification. (4) EDR driver queues a user-mode APC with shellcode that calls <code>LdrLoadDll</code> on the EDR DLL. (5) New process begins at <code>ntdll!LdrInitializeThunk</code>. (6) <code>NtTestAlert</code> drains the APC queue, EDR APC fires. (7) Shellcode calls <code>LdrLoadDll(EDR.dll)</code>. (8) EDR's <code>DllMain</code> calls <code>VirtualProtect</code> + writes hooks. (9) Loader continues, eventually calls <code>main</code> &mdash; with hooks already in place.</div>
+      <div class="q">Walk through how an EDR DLL gets into a brand-new process  what fires when?</div>
+      <div class="a">(1) Parent calls <code>CreateProcess</code>. (2) Kernel builds the new EPROCESS. (3) <code>PsSetCreateProcessNotifyRoutineEx</code> callback fires  the EDR driver receives notification. (4) EDR driver queues a user-mode APC with shellcode that calls <code>LdrLoadDll</code> on the EDR DLL. (5) New process begins at <code>ntdll!LdrInitializeThunk</code>. (6) <code>NtTestAlert</code> drains the APC queue, EDR APC fires. (7) Shellcode calls <code>LdrLoadDll(EDR.dll)</code>. (8) EDR's <code>DllMain</code> calls <code>VirtualProtect</code> + writes hooks. (9) Loader continues, eventually calls <code>main</code>  with hooks already in place.</div>
     </div>
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
@@ -1134,12 +1134,12 @@ description: "How EDRs install their visibility into your process, and the five 
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
       <div class="q">An attacker uses a direct syscall to call <code>NtProtectVirtualMemory(ntdll!.text, RWX)</code>, bypassing the user-mode hook. Does this evade detection?</div>
-      <div class="a">No. The user-mode hook is bypassed, but the kernel-side ETW-TI <code>PROTECTVM_LOCAL</code> event fires inside <code>NtProtectVirtualMemory</code>'s kernel implementation, regardless of how the syscall was invoked. The event includes the target base address, requested protection, and source process. An EDR consuming ETW-TI sees the protection change to RWX on <code>ntdll</code>'s <code>.text</code> section &mdash; an extremely high-fidelity IOC. Attempts to bypass this require kernel-level write access (BYOVD, etc.), not user-mode tricks.</div>
+      <div class="a">No. The user-mode hook is bypassed, but the kernel-side ETW-TI <code>PROTECTVM_LOCAL</code> event fires inside <code>NtProtectVirtualMemory</code>'s kernel implementation, regardless of how the syscall was invoked. The event includes the target base address, requested protection, and source process. An EDR consuming ETW-TI sees the protection change to RWX on <code>ntdll</code>'s <code>.text</code> section  an extremely high-fidelity IOC. Attempts to bypass this require kernel-level write access (BYOVD, etc.), not user-mode tricks.</div>
     </div>
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
       <div class="q">Why does the README of hwbp/NTDLL-Unhook say "unhooking does literally nothing" against modern EDRs?</div>
-      <div class="a">Because Defender for Endpoint, Elastic Defend, and similar mature EDRs deemphasize user-mode hooks in favor of kernel callbacks (<code>PsSetLoadImageNotifyRoutine</code>, etc.) and ETW-TI. Unhooking removes the user-mode hook bytes &mdash; but those weren't the EDR's primary detection mechanism in the first place. The kernel-side telemetry continues firing identically before and after unhooking. Removing user-mode hooks does help against legacy AV and lighter EDRs that rely heavily on inline hooking, but against the modern tier, it's at best a partial measure that needs to be paired with call-stack spoofing and other techniques.</div>
+      <div class="a">Because Defender for Endpoint, Elastic Defend, and similar mature EDRs deemphasize user-mode hooks in favor of kernel callbacks (<code>PsSetLoadImageNotifyRoutine</code>, etc.) and ETW-TI. Unhooking removes the user-mode hook bytes  but those weren't the EDR's primary detection mechanism in the first place. The kernel-side telemetry continues firing identically before and after unhooking. Removing user-mode hooks does help against legacy AV and lighter EDRs that rely heavily on inline hooking, but against the modern tier, it's at best a partial measure that needs to be paired with call-stack spoofing and other techniques.</div>
     </div>
   </div>
 
@@ -1149,20 +1149,20 @@ description: "How EDRs install their visibility into your process, and the five 
   <h2><span class="num">§ 09</span> Closing thought</h2>
   <p>Six volumes in. Here's the picture so far:</p>
   <ul style="font-family: var(--serif); color: var(--ink); padding-left: 24px;">
-    <li style="margin-bottom: 8px;"><strong>Vol. 01</strong> &mdash; the alphabet (data types).</li>
-    <li style="margin-bottom: 8px;"><strong>Vol. 02</strong> &mdash; the static skeleton (PE format).</li>
-    <li style="margin-bottom: 8px;"><strong>Vol. 03</strong> &mdash; the living state (PEB / TEB / LDR).</li>
-    <li style="margin-bottom: 8px;"><strong>Vol. 04</strong> &mdash; the machinery that builds that state (the loader).</li>
-    <li style="margin-bottom: 8px;"><strong>Vol. 05</strong> &mdash; the border crossing (syscalls).</li>
-    <li><strong>Vol. 06</strong> &mdash; how the EDR rewrites bytes near that border, and how attackers undo it.</li>
+    <li style="margin-bottom: 8px;"><strong>Vol. 01</strong>  the alphabet (data types).</li>
+    <li style="margin-bottom: 8px;"><strong>Vol. 02</strong>  the static skeleton (PE format).</li>
+    <li style="margin-bottom: 8px;"><strong>Vol. 03</strong>  the living state (PEB / TEB / LDR).</li>
+    <li style="margin-bottom: 8px;"><strong>Vol. 04</strong>  the machinery that builds that state (the loader).</li>
+    <li style="margin-bottom: 8px;"><strong>Vol. 05</strong>  the border crossing (syscalls).</li>
+    <li><strong>Vol. 06</strong>  how the EDR rewrites bytes near that border, and how attackers undo it.</li>
   </ul>
-  <p style="margin-top: 24px;">A defining theme of the last two volumes is this: <em>user-mode hooks were the entire EDR detection model in 2018. By 2026, they are a residual layer that catches commodity malware while real telemetry happens in the kernel.</em> Hell's Gate, Halo's Gate, Tartarus' Gate, Perun's Fart, EDR-Preloading, Early Cascade Injection &mdash; brilliant techniques, all of them, and all primarily targeting a defense-in-depth layer that mature EDRs no longer rely on as their core. The honest answer for purple team operators in 2026 is: <em>unhooking gets you past the doormat; the burglar alarm is in the walls</em>.</p>
+  <p style="margin-top: 24px;">A defining theme of the last two volumes is this: <em>user-mode hooks were the entire EDR detection model in 2018. By 2026, they are a residual layer that catches commodity malware while real telemetry happens in the kernel.</em> Hell's Gate, Halo's Gate, Tartarus' Gate, Perun's Fart, EDR-Preloading, Early Cascade Injection  brilliant techniques, all of them, and all primarily targeting a defense-in-depth layer that mature EDRs no longer rely on as their core. The honest answer for purple team operators in 2026 is: <em>unhooking gets you past the doormat; the burglar alarm is in the walls</em>.</p>
   <p>For detection engineers, the inverse: don't build your strategy around hook integrity alone. ETW-TI, kernel callbacks, and call-stack capture are your bedrock. Hook integrity is a confirmation signal, not a primary one.</p>
-  <p>Next: <em class="pen">Vol. 07 &mdash; Process Injection Taxonomy (Part 1)</em>. Now that we have the full primitive set &mdash; PE format, loader, syscalls, hooking &mdash; we compose them into the dozen-or-so injection techniques that have shaped offensive Windows tradecraft for the last decade. Classic <code>VirtualAllocEx + WriteProcessMemory + CreateRemoteThread</code> through to APC injection, process hollowing, doppelg&auml;nging, herpaderping, transacted hollowing, ghosting, and the 2024-era Early Cascade. The framing throughout: which structures are touched, which syscalls fire, which detection chokepoints catch each.</p>
+  <p>Next: <em class="pen">Vol. 07  Process Injection Taxonomy (Part 1)</em>. Now that we have the full primitive set  PE format, loader, syscalls, hooking  we compose them into the dozen-or-so injection techniques that have shaped offensive Windows tradecraft for the last decade. Classic <code>VirtualAllocEx + WriteProcessMemory + CreateRemoteThread</code> through to APC injection, process hollowing, doppelg&auml;nging, herpaderping, transacted hollowing, ghosting, and the 2024-era Early Cascade. The framing throughout: which structures are touched, which syscalls fire, which detection chokepoints catch each.</p>
 
   <footer class="end">
     <div>filed under &middot; windows internals &middot; hooking &middot; offensive &amp; detection</div>
-    <div class="sig">&mdash; blacksunCUBE</div>
+    <div class="sig"> blacksunCUBE</div>
   </footer>
 
 </div>
