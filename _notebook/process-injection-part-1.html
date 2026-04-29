@@ -714,20 +714,20 @@ description: "Seven classic techniques for running code inside someone else's pr
   </header>
 
   <h1>Process Injection,<br><em>or: composing six volumes' worth of primitives into seven techniques.</em></h1>
-  <p class="dek">A walk through the seven canonical injection methods that shaped 2017&ndash;2024 offensive Windows tradecraft &mdash; classic remote thread, hollowing, APC, doppelg&auml;nging, herpaderping, ghosting, early bird &mdash; with the kernel telemetry each one fires.</p>
+  <p class="dek">A walk through the seven canonical injection methods that shaped 2017&ndash;2024 offensive Windows tradecraft  classic remote thread, hollowing, APC, doppelg&auml;nging, herpaderping, ghosting, early bird  with the kernel telemetry each one fires.</p>
   <div class="byline">blacksun<span style="color:var(--exec);">CUBE</span> field notebook &middot; vol. 07 (part 1 of 2) &middot; <em>builds on vol. 02 (PE), 04 (loader), 05 (syscalls), 06 (hooking)</em></div>
 
   <p>Six volumes prepared the ground. Now we compose. Every "process injection technique" you've ever heard of decomposes into a small set of primitive operations: open a remote process, allocate memory there, write data, change protections, redirect a thread. The differences between techniques are <em>which subset of primitives they use, in what order, and which detection chokepoint they target</em>.</p>
 
-  <p>This volume covers seven techniques. Part 2 (vol. 08) will cover the rest &mdash; thread hijacking variants, AtomBombing, transacted hollowing, callback abuse, and the 2024+ generation: Early Cascade Injection, EDR-Preloading, and module stomping. The split is by complexity, not importance: the seven here are the <em>foundational</em> techniques, the ones every other technique builds on.</p>
+  <p>This volume covers seven techniques. Part 2 (vol. 08) will cover the rest  thread hijacking variants, AtomBombing, transacted hollowing, callback abuse, and the 2024+ generation: Early Cascade Injection, EDR-Preloading, and module stomping. The split is by complexity, not importance: the seven here are the <em>foundational</em> techniques, the ones every other technique builds on.</p>
 
   <p>For each, we cover four things:</p>
 
   <ol style="font-family: var(--serif); color: var(--ink); padding-left: 24px;">
-    <li style="margin-bottom: 8px;"><strong>The mechanism</strong> &mdash; what API/syscall sequence makes it work.</li>
-    <li style="margin-bottom: 8px;"><strong>The structures touched</strong> &mdash; PEB fields written, image sections unmapped, transactions opened.</li>
-    <li style="margin-bottom: 8px;"><strong>The kernel telemetry</strong> &mdash; what fires in ETW-TI / kernel callbacks regardless of user-mode evasion.</li>
-    <li><strong>The detection chokepoint</strong> &mdash; the single signal that catches this in 2026, even if every other layer is bypassed.</li>
+    <li style="margin-bottom: 8px;"><strong>The mechanism</strong>  what API/syscall sequence makes it work.</li>
+    <li style="margin-bottom: 8px;"><strong>The structures touched</strong>  PEB fields written, image sections unmapped, transactions opened.</li>
+    <li style="margin-bottom: 8px;"><strong>The kernel telemetry</strong>  what fires in ETW-TI / kernel callbacks regardless of user-mode evasion.</li>
+    <li><strong>The detection chokepoint</strong>  the single signal that catches this in 2026, even if every other layer is bypassed.</li>
   </ol>
 
   <p>Same axes you know:</p>
@@ -771,7 +771,7 @@ description: "Seven classic techniques for running code inside someone else's pr
     <tr><td>Resume / start thread</td><td><code>NtResumeThread</code> / <code>NtCreateThreadEx</code></td><td>Start execution. The trigger.</td></tr>
   </table>
 
-  <p>Almost every detection rule for process injection in production EDR products keys on combinations of two or three of these calls happening cross-process within a short time window. The hard part for offensive code is not finding a "novel primitive" &mdash; it's <em>composing the existing primitives in a way that doesn't pattern-match a known sequence</em>.</p>
+  <p>Almost every detection rule for process injection in production EDR products keys on combinations of two or three of these calls happening cross-process within a short time window. The hard part for offensive code is not finding a "novel primitive"  it's <em>composing the existing primitives in a way that doesn't pattern-match a known sequence</em>.</p>
 
   <hr class="rule">
 
@@ -818,10 +818,10 @@ description: "Seven classic techniques for running code inside someone else's pr
   </div>
 
   <div class="telemetry">
-    <strong>What fires:</strong> step 1 produces a process-handle event with <code>GrantedAccess</code> mask <code>0x1FFFFF</code> &mdash; full access to a process the caller has no business touching. Sysmon Event 10 logs this; Defender for Endpoint surfaces it. Step 2 fires ETW-TI <code>ALLOCVM_REMOTE</code>. Step 3 fires <code>WRITEVM_REMOTE</code>. Step 4 fires the <code>PsSetCreateThreadNotifyRoutine</code> kernel callback with the source PID, target PID, and start address &mdash; if the start address points to private RWX memory in the target, that's a near-certain IOC. <strong>Detection in 2026: trivial across all major EDRs.</strong>
+    <strong>What fires:</strong> step 1 produces a process-handle event with <code>GrantedAccess</code> mask <code>0x1FFFFF</code>  full access to a process the caller has no business touching. Sysmon Event 10 logs this; Defender for Endpoint surfaces it. Step 2 fires ETW-TI <code>ALLOCVM_REMOTE</code>. Step 3 fires <code>WRITEVM_REMOTE</code>. Step 4 fires the <code>PsSetCreateThreadNotifyRoutine</code> kernel callback with the source PID, target PID, and start address  if the start address points to private RWX memory in the target, that's a near-certain IOC. <strong>Detection in 2026: trivial across all major EDRs.</strong>
   </div>
 
-  <p>This technique is no longer viable against any modern EDR &mdash; it's the canonical baseline that every detection rule starts from. We document it here because all subsequent techniques reduce to "do the same thing, but try to evade one of these five telemetry events."</p>
+  <p>This technique is no longer viable against any modern EDR  it's the canonical baseline that every detection rule starts from. We document it here because all subsequent techniques reduce to "do the same thing, but try to evade one of these five telemetry events."</p>
 
   <hr class="rule">
 
@@ -880,11 +880,11 @@ description: "Seven classic techniques for running code inside someone else's pr
   <p>The defining primitive is step 3: <code>NtUnmapViewOfSection</code> on a remote process's <em>primary image section</em>. Microsoft's own MITRE technique entry calls this out as the most distinctive indicator: <em>"The call to ZwUnmapViewOfSection or NtUnmapViewOfSection on a remote process is the most distinctive indicator of process hollowing. This API call is rarely used in legitimate software."</em></p>
 
   <div class="margin">
-    Some implementations skip the unmap entirely and just overwrite the original image bytes (vol. 02's PE sections happen to align such that you can write a smaller PE into the same address space). This is what VBA-RunPE does, which is exactly why Cortex XDR added explicit signatures for it &mdash; the unmap was the simple detection signal, and dropping it forces defenders to look at the in-memory image vs. on-disk image hash mismatch instead.
+    Some implementations skip the unmap entirely and just overwrite the original image bytes (vol. 02's PE sections happen to align such that you can write a smaller PE into the same address space). This is what VBA-RunPE does, which is exactly why Cortex XDR added explicit signatures for it  the unmap was the simple detection signal, and dropping it forces defenders to look at the in-memory image vs. on-disk image hash mismatch instead.
   </div>
 
   <div class="telemetry">
-    <strong>Detection in 2026:</strong> two signatures in parallel. (1) Cross-process <code>NtUnmapViewOfSection</code> on the primary image section &mdash; high-fidelity, low false-positive. Sysmon's <em>Event ID 25</em> (introduced in Sysmon 13.00, January 2021) fires explicitly when "the mapped image of a process doesn't match the on-disk image file" (Microsoft's wording). (2) PEB.ImageBaseAddress mapped region whose hash doesn't match the executable on disk. Volatility's <code>hollowfind</code> plugin and <code>malfind</code> have caught hollowing for over a decade.
+    <strong>Detection in 2026:</strong> two signatures in parallel. (1) Cross-process <code>NtUnmapViewOfSection</code> on the primary image section  high-fidelity, low false-positive. Sysmon's <em>Event ID 25</em> (introduced in Sysmon 13.00, January 2021) fires explicitly when "the mapped image of a process doesn't match the on-disk image file" (Microsoft's wording). (2) PEB.ImageBaseAddress mapped region whose hash doesn't match the executable on disk. Volatility's <code>hollowfind</code> plugin and <code>malfind</code> have caught hollowing for over a decade.
   </div>
 
   <hr class="rule">
@@ -902,9 +902,9 @@ description: "Seven classic techniques for running code inside someone else's pr
     <p class="summary">Queue an APC to a remote thread; when the thread enters an alertable state (or when <code>NtTestAlert</code> empties the queue at thread start), the APC fires and runs your code.</p>
   </div>
 
-  <p>The mechanic is structurally different from the previous techniques: you don't create a new thread. You hijack an existing one's APC queue. Every Windows thread has a dispatcher mechanism that drains pending APCs at well-defined points &mdash; on entry, on exit from blocking syscalls, on <code>WaitForSingleObjectEx</code> with <code>bAlertable=TRUE</code>, or via <code>NtTestAlert</code>.</p>
+  <p>The mechanic is structurally different from the previous techniques: you don't create a new thread. You hijack an existing one's APC queue. Every Windows thread has a dispatcher mechanism that drains pending APCs at well-defined points  on entry, on exit from blocking syscalls, on <code>WaitForSingleObjectEx</code> with <code>bAlertable=TRUE</code>, or via <code>NtTestAlert</code>.</p>
 
-  <p>Cyberbit's 2018 disclosure of <strong>Early Bird</strong> made this technique famous: the canonical chain at thread startup is <code>LdrInitializeThunk → LdrpInitialize → _LdrpInitialize → NtTestAlert → KiUserApcDispatcher</code>, and the APC fires <em>before</em> the application's <code>main</code> &mdash; before, in many cases, the EDR's hooks have been installed.</p>
+  <p>Cyberbit's 2018 disclosure of <strong>Early Bird</strong> made this technique famous: the canonical chain at thread startup is <code>LdrInitializeThunk → LdrpInitialize → _LdrpInitialize → NtTestAlert → KiUserApcDispatcher</code>, and the APC fires <em>before</em> the application's <code>main</code>  before, in many cases, the EDR's hooks have been installed.</p>
 
   <div class="flow">
     <div class="caption">canonical flow &middot; Early Bird APC injection</div>
@@ -958,7 +958,7 @@ description: "Seven classic techniques for running code inside someone else's pr
     <p class="summary">Open an NTFS transaction, write malicious bytes to a legitimate file inside the transaction, map the transacted file as an image section, roll back the transaction, then create a process from the section. The disk never contains the malware.</p>
   </div>
 
-  <p>This is the first technique in the volume that exploits an undocumented OS feature for evasion rather than just composing primitives differently. <strong>Transactional NTFS (TxF)</strong> was introduced in Vista to allow atomic file operations &mdash; a sequence of writes that either fully commit or fully roll back. Microsoft has since deprecated TxF for new applications, but the kernel still supports it. The catch: <em>image sections created from transacted files retain their backing data after rollback</em>.</p>
+  <p>This is the first technique in the volume that exploits an undocumented OS feature for evasion rather than just composing primitives differently. <strong>Transactional NTFS (TxF)</strong> was introduced in Vista to allow atomic file operations  a sequence of writes that either fully commit or fully roll back. Microsoft has since deprecated TxF for new applications, but the kernel still supports it. The catch: <em>image sections created from transacted files retain their backing data after rollback</em>.</p>
 
   <div class="flow">
     <div class="caption">canonical flow &middot; process doppelg&auml;nging</div>
@@ -999,7 +999,7 @@ description: "Seven classic techniques for running code inside someone else's pr
     <p>Antivirus engines scanned files at write time and at process creation. Doppelg&auml;nging ensured (a) the file write happens inside a transaction the AV doesn't inspect, (b) the file content visible at process creation is the rolled-back benign version, and (c) the kernel happily creates a process from an image section whose backing file no longer matches what's mapped. From the security product's perspective, the process appears to be running <code>legit.exe</code>; the in-memory image is something else entirely.</p>
   </div>
 
-  <p>The 2017 disclosure used <code>NtCreateProcessEx</code> &mdash; an undocumented older syscall that creates a process from a section <em>without</em> firing the standard process creation callbacks at the same point as <code>NtCreateUserProcess</code>. This is the seam that Microsoft eventually closed.</p>
+  <p>The 2017 disclosure used <code>NtCreateProcessEx</code>  an undocumented older syscall that creates a process from a section <em>without</em> firing the standard process creation callbacks at the same point as <code>NtCreateUserProcess</code>. This is the seam that Microsoft eventually closed.</p>
 
   <div class="telemetry">
     <strong>Detection in 2026:</strong> Microsoft Defender for Endpoint added explicit detection for the doppelg&auml;nging class in 2022, focusing on the <code>FILE_OBJECT</code> abnormalities visible at process creation time. The <code>MpCreateProcessNotifyRoutineEx</code> callback (in <code>WdFilter.sys</code>) inspects the FileObject's transaction state. <strong>Doppelg&auml;nging is reliably caught by Defender, Elastic Defend, and CrowdStrike in 2026.</strong> Cyberwarfare Labs verified that Windows Defender returns <code>0xC0000022 (ACCESS_DENIED)</code> when the doppelganging chain attempts thread creation. The technique is a known dead-end against mainstream EDRs.
@@ -1020,7 +1020,7 @@ description: "Seven classic techniques for running code inside someone else's pr
     <p class="summary">Write the payload PE to disk, map it as a section, then overwrite the file on disk with a decoy <em>before</em> the kernel's process-creation callback fires. The callback inspects the disk file (now decoy), not the mapped section (still malicious).</p>
   </div>
 
-  <p>Herpaderping exploits a specific timing fact established in Elastic's research and Microsoft's own blog: <em><code>PsSetCreateProcessNotifyRoutineEx</code> callbacks are not invoked at process creation &mdash; they're invoked when the first thread is inserted</em>. That gap, between section mapping and first-thread-insertion, is the herpaderping window.</p>
+  <p>Herpaderping exploits a specific timing fact established in Elastic's research and Microsoft's own blog: <em><code>PsSetCreateProcessNotifyRoutineEx</code> callbacks are not invoked at process creation  they're invoked when the first thread is inserted</em>. That gap, between section mapping and first-thread-insertion, is the herpaderping window.</p>
 
   <div class="flow">
     <div class="caption">canonical flow &middot; process herpaderping</div>
@@ -1051,10 +1051,10 @@ description: "Seven classic techniques for running code inside someone else's pr
     </div>
   </div>
 
-  <p>The structural difference from doppelg&auml;nging: <em>no NTFS transactions</em>. Just an open file handle, a section, and a write. The defender's process-creation scan sees the decoy, not the payload. The mapped section in memory still contains the payload &mdash; and that's what the new process executes.</p>
+  <p>The structural difference from doppelg&auml;nging: <em>no NTFS transactions</em>. Just an open file handle, a section, and a write. The defender's process-creation scan sees the decoy, not the payload. The mapped section in memory still contains the payload  and that's what the new process executes.</p>
 
   <div class="telemetry">
-    <strong>Detection in 2026:</strong> mixed. Microsoft Defender added detection in their 2022 blog post specifically for this class; Sysmon's <em>Event ID 25</em> (image tampering) catches the on-disk vs. in-memory mismatch. However, jxy-s's own GitHub README (which remains the authoritative source) noted that <em>"Defender doesn't catch Herpaderping"</em> as of disclosure &mdash; that statement is now outdated for Defender for Endpoint, but <strong>some commercial AVs still miss this technique</strong> because they trust the disk image at thread-insert time. Elastic Defend's <code>process.Ext.defense_evasions</code> category is the clean reference detection.
+    <strong>Detection in 2026:</strong> mixed. Microsoft Defender added detection in their 2022 blog post specifically for this class; Sysmon's <em>Event ID 25</em> (image tampering) catches the on-disk vs. in-memory mismatch. However, jxy-s's own GitHub README (which remains the authoritative source) noted that <em>"Defender doesn't catch Herpaderping"</em> as of disclosure  that statement is now outdated for Defender for Endpoint, but <strong>some commercial AVs still miss this technique</strong> because they trust the disk image at thread-insert time. Elastic Defend's <code>process.Ext.defense_evasions</code> category is the clean reference detection.
   </div>
 
   <hr class="rule">
@@ -1111,17 +1111,17 @@ description: "Seven classic techniques for running code inside someone else's pr
   <p>Landau's original PoC demonstrated Windows Defender (at the time) attempting to scan the file fail twice: once because the file was delete-pending, and again because the file no longer existed. The process executed unimpeded.</p>
 
   <div class="margin">
-    Microsoft's response when Landau disclosed this in May 2021 was: "does not meet our bar for servicing" &mdash; the same response they gave to herpaderping's disclosure a year earlier. This is unusual for Microsoft, and it tells you something about the threat model: <em>Microsoft considers process tampering attacks to be the security product's problem to detect, not the kernel's problem to prevent</em>. The kernel happily continues to permit these techniques in 2026; only the in-product detection layer catches them.
+    Microsoft's response when Landau disclosed this in May 2021 was: "does not meet our bar for servicing"  the same response they gave to herpaderping's disclosure a year earlier. This is unusual for Microsoft, and it tells you something about the threat model: <em>Microsoft considers process tampering attacks to be the security product's problem to detect, not the kernel's problem to prevent</em>. The kernel happily continues to permit these techniques in 2026; only the in-product detection layer catches them.
   </div>
 
   <div class="telemetry">
-    <strong>Detection in 2026:</strong> Elastic Security shipped explicit ghosting detection in 2021. Defender for Endpoint added detection in their 2022 update (referenced in Microsoft's "Using process creation properties to catch evasion techniques" blog). The detection inspects the <code>FILE_OBJECT</code>'s state at process-creation callback time and flags abnormalities &mdash; specifically, files that are delete-pending or have already been deleted. <strong>Ghosting reliably catches detection in mature EDRs in 2026, but legacy AVs and lighter EDR products still miss it.</strong>
+    <strong>Detection in 2026:</strong> Elastic Security shipped explicit ghosting detection in 2021. Defender for Endpoint added detection in their 2022 update (referenced in Microsoft's "Using process creation properties to catch evasion techniques" blog). The detection inspects the <code>FILE_OBJECT</code>'s state at process-creation callback time and flags abnormalities  specifically, files that are delete-pending or have already been deleted. <strong>Ghosting reliably catches detection in mature EDRs in 2026, but legacy AVs and lighter EDR products still miss it.</strong>
   </div>
 
   <hr class="rule">
 
   <!-- ========== § 08 ========== -->
-  <h2><span class="num">§ 08</span> Detection &mdash; the cross-cutting view</h2>
+  <h2><span class="num">§ 08</span> Detection  the cross-cutting view</h2>
   <p class="sub">Every technique above defeats at least one detection layer. Here's the full lattice.</p>
 
   <p>The seven techniques target different chokepoints. Walking through them in order shows the historical arms race: each new technique was designed to defeat one specific detection that caught the previous generation.</p>
@@ -1195,7 +1195,7 @@ description: "Seven classic techniques for running code inside someone else's pr
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
       <div class="q">Process Doppelg&auml;nging uses Transactional NTFS. What's the four-word summary of the core trick?</div>
-      <div class="a">"Transact, write, map, rollback." The malicious PE bytes are written to a legitimate file <em>inside</em> an NTFS transaction. An image section is created from the transacted file (containing malicious bytes). The transaction is rolled back &mdash; the file on disk reverts to benign. But the kernel-cached image section still contains the malicious bytes, and a process can be created from it. AV scanning the file sees benign content; the running process executes malicious code.</div>
+      <div class="a">"Transact, write, map, rollback." The malicious PE bytes are written to a legitimate file <em>inside</em> an NTFS transaction. An image section is created from the transacted file (containing malicious bytes). The transaction is rolled back  the file on disk reverts to benign. But the kernel-cached image section still contains the malicious bytes, and a process can be created from it. AV scanning the file sees benign content; the running process executes malicious code.</div>
     </div>
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
@@ -1205,7 +1205,7 @@ description: "Seven classic techniques for running code inside someone else's pr
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
       <div class="q">What's the OS-level fact that Process Ghosting exploits?</div>
-      <div class="a">Windows prevents modification or deletion of executable files <em>only after</em> they're mapped into an image section. So the technique: open a file with <code>DELETE</code> access, mark it delete-pending via <code>NtSetInformationFile(FileDispositionInformation, DeleteFile=TRUE)</code>, write the payload, map it as a section, close the handle (deletion completes &mdash; the file is gone), then create a process from the section. The process now has a backing file that doesn't exist, so AV scans of the file path return "file not found."</div>
+      <div class="a">Windows prevents modification or deletion of executable files <em>only after</em> they're mapped into an image section. So the technique: open a file with <code>DELETE</code> access, mark it delete-pending via <code>NtSetInformationFile(FileDispositionInformation, DeleteFile=TRUE)</code>, write the payload, map it as a section, close the handle (deletion completes  the file is gone), then create a process from the section. The process now has a backing file that doesn't exist, so AV scans of the file path return "file not found."</div>
     </div>
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
@@ -1215,7 +1215,7 @@ description: "Seven classic techniques for running code inside someone else's pr
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
       <div class="q">Why does Microsoft consider process tampering "not meeting their bar for servicing", and what does this mean for defenders?</div>
-      <div class="a">Microsoft's stated position (from herpaderping and ghosting disclosures, 2020 and 2021) is that the kernel's job is to faithfully implement transactions, file deletion, and process creation as designed; preventing abuse of those primitives is the security product's responsibility. This is a deliberate boundary. For defenders it means: the kernel will not be patched to refuse these operations; detection must come from the EDR layer (FileObject inspection, ETW-TI, behavioral analysis). Sysmon Event 25 was Microsoft's compromise &mdash; surface the signal, let products decide what to do.</div>
+      <div class="a">Microsoft's stated position (from herpaderping and ghosting disclosures, 2020 and 2021) is that the kernel's job is to faithfully implement transactions, file deletion, and process creation as designed; preventing abuse of those primitives is the security product's responsibility. This is a deliberate boundary. For defenders it means: the kernel will not be patched to refuse these operations; detection must come from the EDR layer (FileObject inspection, ETW-TI, behavioral analysis). Sysmon Event 25 was Microsoft's compromise  surface the signal, let products decide what to do.</div>
     </div>
   </div>
 
@@ -1225,24 +1225,24 @@ description: "Seven classic techniques for running code inside someone else's pr
   <h2><span class="num">§ 10</span> Closing thought</h2>
   <p>Seven volumes in. Here's the picture so far:</p>
   <ul style="font-family: var(--serif); color: var(--ink); padding-left: 24px;">
-    <li style="margin-bottom: 8px;"><strong>Vol. 01</strong> &mdash; the alphabet (data types).</li>
-    <li style="margin-bottom: 8px;"><strong>Vol. 02</strong> &mdash; the static skeleton (PE format).</li>
-    <li style="margin-bottom: 8px;"><strong>Vol. 03</strong> &mdash; the living state (PEB / TEB / LDR).</li>
-    <li style="margin-bottom: 8px;"><strong>Vol. 04</strong> &mdash; the machinery that builds that state (the loader).</li>
-    <li style="margin-bottom: 8px;"><strong>Vol. 05</strong> &mdash; the border crossing (syscalls).</li>
-    <li style="margin-bottom: 8px;"><strong>Vol. 06</strong> &mdash; how the EDR rewrites bytes near that border.</li>
-    <li><strong>Vol. 07</strong> &mdash; how attackers compose all of the above into seven foundational injection techniques.</li>
+    <li style="margin-bottom: 8px;"><strong>Vol. 01</strong>  the alphabet (data types).</li>
+    <li style="margin-bottom: 8px;"><strong>Vol. 02</strong>  the static skeleton (PE format).</li>
+    <li style="margin-bottom: 8px;"><strong>Vol. 03</strong>  the living state (PEB / TEB / LDR).</li>
+    <li style="margin-bottom: 8px;"><strong>Vol. 04</strong>  the machinery that builds that state (the loader).</li>
+    <li style="margin-bottom: 8px;"><strong>Vol. 05</strong>  the border crossing (syscalls).</li>
+    <li style="margin-bottom: 8px;"><strong>Vol. 06</strong>  how the EDR rewrites bytes near that border.</li>
+    <li><strong>Vol. 07</strong>  how attackers compose all of the above into seven foundational injection techniques.</li>
   </ul>
 
   <p style="margin-top: 24px;">The dominant pattern across all seven techniques: <em>each one targets one specific detection chokepoint, and detection layers built on top of newer techniques rapidly close the gap</em>. Hollowing was world-class in 2014, baseline in 2026. Doppelg&auml;nging was state-of-the-art in 2017, reliably caught in 2026. Herpaderping and ghosting got ~3 years before mainstream EDRs caught up. The half-life of an injection technique against mature commercial EDRs is roughly the time between its public disclosure and the next major Sysmon / Defender / Elastic Defend release.</p>
 
   <p>That's both the bad news for offense (everything in this volume is now telemetry-rich) and the good news for defense (modern stacks reliably catch the foundational techniques). The arms race has moved to part 2: thread hijacking variants, callback abuse, and the 2024 generation that targets the process-creation race window itself.</p>
 
-  <p>Next: <em class="pen">Vol. 08 &mdash; Process Injection Taxonomy (Part 2)</em>. Thread context hijacking (T1055.003), AtomBombing (T1055.014), transacted hollowing, callback function hooks (PROPagate, ALPC, GUI subclasses), module stomping, EDR-Preloading (Schvartzman / MalwareTech 2024), and Outflank's Early Cascade Injection (October 2024) which targets the very LdrLoadDll dependency-load loop we walked in vol. 04. Same framing throughout: structures touched, syscalls fired, detection chokepoints.</p>
+  <p>Next: <em class="pen">Vol. 08  Process Injection Taxonomy (Part 2)</em>. Thread context hijacking (T1055.003), AtomBombing (T1055.014), transacted hollowing, callback function hooks (PROPagate, ALPC, GUI subclasses), module stomping, EDR-Preloading (Schvartzman / MalwareTech 2024), and Outflank's Early Cascade Injection (October 2024) which targets the very LdrLoadDll dependency-load loop we walked in vol. 04. Same framing throughout: structures touched, syscalls fired, detection chokepoints.</p>
 
   <footer class="end">
     <div>filed under &middot; windows internals &middot; process injection &middot; offensive &amp; detection</div>
-    <div class="sig">&mdash; blacksunCUBE</div>
+    <div class="sig"> blacksunCUBE</div>
   </footer>
 
 </div>
