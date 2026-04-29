@@ -714,10 +714,10 @@ description: "Six modern injection techniques — thread hijacking, AtomBombing,
   </header>
 
   <h1>Process Injection,<br><em>or: the techniques that arrived after the kernel learned to watch.</em></h1>
-  <p class="dek">Six modern injection methods &mdash; thread hijacking, AtomBombing, module stomping, EDR-Preloading, and Outflank's Early Cascade &mdash; built for an era where the hooks themselves are the obvious thing not to trip on.</p>
+  <p class="dek">Six modern injection methods  thread hijacking, AtomBombing, module stomping, EDR-Preloading, and Outflank's Early Cascade  built for an era where the hooks themselves are the obvious thing not to trip on.</p>
   <div class="byline">blacksun<span style="color:var(--exec);">CUBE</span> field notebook &middot; vol. 08 (part 2 of 2) &middot; <em>builds on every prior volume; closes ARC II</em></div>
 
-  <p>Part 1 walked the seven foundational injection techniques &mdash; classic remote thread, hollowing, APC, doppelg&auml;nging, herpaderping, ghosting, early bird. By 2026, every one of them is reliably caught by mature commercial EDRs. The techniques in <em>this</em> volume are different: they're the responses to that detection, designed by researchers and offensive engineers from 2016 onwards but most active in the 2024&ndash;2025 window. Each one targets a <em>specific weakness</em> in modern detection pipelines.</p>
+  <p>Part 1 walked the seven foundational injection techniques  classic remote thread, hollowing, APC, doppelg&auml;nging, herpaderping, ghosting, early bird. By 2026, every one of them is reliably caught by mature commercial EDRs. The techniques in <em>this</em> volume are different: they're the responses to that detection, designed by researchers and offensive engineers from 2016 onwards but most active in the 2024&ndash;2025 window. Each one targets a <em>specific weakness</em> in modern detection pipelines.</p>
 
   <p>The pattern across all six is the same: <strong>find a normal-looking primitive that a defender's call-stack heuristics will accept, and use it to do something the heuristics weren't built to look for</strong>. Thread hijacking re-purposes <code>SetThreadContext</code>. AtomBombing re-purposes the global atom table. Module stomping re-purposes a legitimate DLL's <code>.text</code> section. EDR-Preloading re-purposes an undocumented <code>ntdll</code> callback. Early Cascade re-purposes the loader's own dependency-loading loop.</p>
 
@@ -727,7 +727,7 @@ description: "Six modern injection techniques — thread hijacking, AtomBombing,
     <div class="legend-item r">
       <span class="tag">R &middot; Read</span>
       <h4>Re-purposing</h4>
-      <p>Each technique starts by reading existing process state &mdash; threads, modules, callbacks &mdash; and finds a primitive built for legitimate use that can be subverted.</p>
+      <p>Each technique starts by reading existing process state  threads, modules, callbacks  and finds a primitive built for legitimate use that can be subverted.</p>
     </div>
     <div class="legend-item w">
       <span class="tag">W &middot; Write</span>
@@ -750,7 +750,7 @@ description: "Six modern injection techniques — thread hijacking, AtomBombing,
   <p>By the end of vol. 07, we established the five detection chokepoints that catch the foundational techniques in 2026:</p>
 
   <ol style="font-family: var(--serif); color: var(--ink); padding-left: 24px;">
-    <li style="margin-bottom: 8px;"><strong>ETW-TI cross-process events</strong> &mdash; <code>ALLOCVM_REMOTE</code>, <code>WRITEVM_REMOTE</code>, <code>PROTECTVM_REMOTE</code> fire in the kernel regardless of how the call was invoked.</li>
+    <li style="margin-bottom: 8px;"><strong>ETW-TI cross-process events</strong>  <code>ALLOCVM_REMOTE</code>, <code>WRITEVM_REMOTE</code>, <code>PROTECTVM_REMOTE</code> fire in the kernel regardless of how the call was invoked.</li>
     <li style="margin-bottom: 8px;"><strong>Sysmon Event ID 25</strong> (image tampering) catches in-memory PE drift from on-disk image.</li>
     <li style="margin-bottom: 8px;"><strong>FileObject abnormality at process-creation callback</strong> catches doppelg&auml;nging, herpaderping, ghosting.</li>
     <li style="margin-bottom: 8px;"><strong>Cross-process APC queueing</strong> catches Early Bird and basic APC injection.</li>
@@ -770,7 +770,7 @@ description: "Six modern injection techniques — thread hijacking, AtomBombing,
 
   <!-- ========== § 02 ========== -->
   <h2><span class="num">§ 02</span> Thread Execution Hijacking</h2>
-  <p class="sub">Don't create a new thread &mdash; commandeer an existing one.</p>
+  <p class="sub">Don't create a new thread  commandeer an existing one.</p>
 
   <div class="technique t1">
     <div class="head">
@@ -778,7 +778,7 @@ description: "Six modern injection techniques — thread hijacking, AtomBombing,
       <div class="mitre">MITRE T1055.003</div>
       <div class="year">~2010 (mature), still active 2026</div>
     </div>
-    <p class="summary">Find an existing thread in the target. Suspend it, write payload, change its instruction pointer, resume. No new thread is created &mdash; no <code>CreateRemoteThread</code> telemetry fires.</p>
+    <p class="summary">Find an existing thread in the target. Suspend it, write payload, change its instruction pointer, resume. No new thread is created  no <code>CreateRemoteThread</code> telemetry fires.</p>
   </div>
 
   <div class="flow">
@@ -820,12 +820,12 @@ description: "Six modern injection techniques — thread hijacking, AtomBombing,
     </div>
   </div>
 
-  <p>The structural advantage: <em>no thread creation event fires</em>. <code>PsSetCreateThreadNotifyRoutine</code> never sees this. The victim thread continues running &mdash; just at a different address than where it was suspended. From a process-tree view, nothing new happens.</p>
+  <p>The structural advantage: <em>no thread creation event fires</em>. <code>PsSetCreateThreadNotifyRoutine</code> never sees this. The victim thread continues running  just at a different address than where it was suspended. From a process-tree view, nothing new happens.</p>
 
   <p>The structural disadvantage, well known since Elastic's 2017 survey: <strong>suspending a thread mid-syscall causes the kernel to roll back, but suspending it mid-NTDLL can corrupt thread state when resumed</strong>. Mature implementations check <code>ctx.Rip</code> against the address range of <code>ntdll.dll</code> before redirecting, and retry if the thread is currently in a syscall. Without that check, the technique sporadically crashes the host process, which itself is a detection signal.</p>
 
   <div class="telemetry">
-    <strong>What fires in 2026:</strong> <code>NtSetContextThread</code> on a remote thread fires <code>Microsoft-Windows-Kernel-Audit-API-Calls</code> ETW events (vol. 06). The combination of (a) <code>OpenThread</code> with <code>THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT | THREAD_SET_CONTEXT</code> rights cross-process, (b) <code>NtSuspendThread</code> on a victim, (c) <code>NtSetContextThread</code> with <code>Rip</code> pointing to a private memory region, all within milliseconds &mdash; that's a high-fidelity composite signal. Defender for Endpoint and Elastic Defend ship rules for it. <strong>Detection in 2026: reliable when call-stack capture is enabled.</strong>
+    <strong>What fires in 2026:</strong> <code>NtSetContextThread</code> on a remote thread fires <code>Microsoft-Windows-Kernel-Audit-API-Calls</code> ETW events (vol. 06). The combination of (a) <code>OpenThread</code> with <code>THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT | THREAD_SET_CONTEXT</code> rights cross-process, (b) <code>NtSuspendThread</code> on a victim, (c) <code>NtSetContextThread</code> with <code>Rip</code> pointing to a private memory region, all within milliseconds  that's a high-fidelity composite signal. Defender for Endpoint and Elastic Defend ship rules for it. <strong>Detection in 2026: reliable when call-stack capture is enabled.</strong>
   </div>
 
   <hr class="rule">
@@ -840,27 +840,27 @@ description: "Six modern injection techniques — thread hijacking, AtomBombing,
       <div class="mitre">no formal MITRE ID yet</div>
       <div class="year">2025 (Check Point Research, hasherezade)</div>
     </div>
-    <p class="summary">Find a thread that's already <em>waiting</em> (not running) &mdash; e.g., parked in <code>WaitForSingleObjectEx</code>. Modify its return address on the kernel stack via stack-frame writes, not via <code>SetThreadContext</code>. When the wait returns, the thread "returns" to your shellcode.</p>
+    <p class="summary">Find a thread that's already <em>waiting</em> (not running)  e.g., parked in <code>WaitForSingleObjectEx</code>. Modify its return address on the kernel stack via stack-frame writes, not via <code>SetThreadContext</code>. When the wait returns, the thread "returns" to your shellcode.</p>
   </div>
 
   <p>This is the most important <em>new</em> technique in vol. 08. Disclosed by hasherezade at Check Point Research in <strong>April 2025</strong>, WTH addresses the central weakness of classic thread hijacking: the <code>SetThreadContext</code> call, with its <code>Microsoft-Windows-Kernel-Audit-API-Calls</code> telemetry, is itself the highest-fidelity IOC.</p>
 
-  <p>The insight: most processes have threads that spend nearly all their time blocked in waits. <code>explorer.exe</code> alone has dozens. A thread blocked in <code>WaitForSingleObjectEx</code> has its return address on its kernel-side stack &mdash; visible via <code>ReadProcessMemory</code> if you can identify the stack region. <em>Overwriting that return address through <code>WriteProcessMemory</code> redirects execution when the wait completes</em>. No suspend, no context modification.</p>
+  <p>The insight: most processes have threads that spend nearly all their time blocked in waits. <code>explorer.exe</code> alone has dozens. A thread blocked in <code>WaitForSingleObjectEx</code> has its return address on its kernel-side stack  visible via <code>ReadProcessMemory</code> if you can identify the stack region. <em>Overwriting that return address through <code>WriteProcessMemory</code> redirects execution when the wait completes</em>. No suspend, no context modification.</p>
 
   <div class="callout">
     <div class="label">why this matters as a research milestone</div>
-    <p>WTH is the first widely-discussed injection technique that <em>completely avoids</em> the thread-state-modification primitives EDRs have built rules around since 2018. The Check Point disclosure noted: "WTH avoids using APIs that trigger most alerts, such as <code>SuspendThread</code>/<code>ResumeThread</code> and <code>SetThreadContext</code>." It still requires cross-process write, so ETW-TI <code>WRITEVM_REMOTE</code> fires &mdash; but the write target is a stack address, not RWX private memory or an image's <code>.text</code>, which is a less-watched region. Detection engineers in 2026 are still calibrating signal-to-noise on stack-region writes.</p>
+    <p>WTH is the first widely-discussed injection technique that <em>completely avoids</em> the thread-state-modification primitives EDRs have built rules around since 2018. The Check Point disclosure noted: "WTH avoids using APIs that trigger most alerts, such as <code>SuspendThread</code>/<code>ResumeThread</code> and <code>SetThreadContext</code>." It still requires cross-process write, so ETW-TI <code>WRITEVM_REMOTE</code> fires  but the write target is a stack address, not RWX private memory or an image's <code>.text</code>, which is a less-watched region. Detection engineers in 2026 are still calibrating signal-to-noise on stack-region writes.</p>
   </div>
 
   <div class="telemetry">
-    <strong>What fires in 2026:</strong> <code>NtWriteVirtualMemory</code> cross-process fires regardless &mdash; that's the unavoidable signal. The novelty is that the <em>target address</em> looks innocuous (a stack region in a legitimate thread, not RWX or <code>.text</code>). Detection engineers are responding by adding "writes to thread stack memory" as a new IOC category. Defender for Endpoint added detection signatures specifically for stack-region writes in late 2025; Elastic Defend's rule pack covers it as of 8.16. <strong>Detection in 2026 is currently asymmetric &mdash; mature EDRs have caught up; lighter products may still miss it.</strong>
+    <strong>What fires in 2026:</strong> <code>NtWriteVirtualMemory</code> cross-process fires regardless  that's the unavoidable signal. The novelty is that the <em>target address</em> looks innocuous (a stack region in a legitimate thread, not RWX or <code>.text</code>). Detection engineers are responding by adding "writes to thread stack memory" as a new IOC category. Defender for Endpoint added detection signatures specifically for stack-region writes in late 2025; Elastic Defend's rule pack covers it as of 8.16. <strong>Detection in 2026 is currently asymmetric  mature EDRs have caught up; lighter products may still miss it.</strong>
   </div>
 
   <hr class="rule">
 
   <!-- ========== § 04 ========== -->
   <h2><span class="num">§ 04</span> AtomBombing</h2>
-  <p class="sub">Use the global atom table as a write-what-where primitive &mdash; without <code>WriteProcessMemory</code> at all.</p>
+  <p class="sub">Use the global atom table as a write-what-where primitive  without <code>WriteProcessMemory</code> at all.</p>
 
   <div class="technique t3">
     <div class="head">
@@ -907,7 +907,7 @@ description: "Six modern injection techniques — thread hijacking, AtomBombing,
   </div>
 
   <div class="telemetry">
-    <strong>What fires in 2026:</strong> the cross-process APC pattern is the durable signal &mdash; <code>NtQueueApcThread</code> with source PID &ne; target PID, regardless of what the APC routine is. Some EDRs additionally hook <code>GlobalAddAtom</code> as a cheap secondary signal but it's high-noise (legitimate apps use atoms heavily). The key in 2026 is that AtomBombing-style techniques no longer need <code>NtQueueApcThread</code> &mdash; modern variants use <code>SetWindowLongPtr</code> + window subclass abuse instead, which is harder to ring-fence. <strong>Original AtomBombing (2016 PoC): caught reliably. Modern variants: harder.</strong>
+    <strong>What fires in 2026:</strong> the cross-process APC pattern is the durable signal  <code>NtQueueApcThread</code> with source PID &ne; target PID, regardless of what the APC routine is. Some EDRs additionally hook <code>GlobalAddAtom</code> as a cheap secondary signal but it's high-noise (legitimate apps use atoms heavily). The key in 2026 is that AtomBombing-style techniques no longer need <code>NtQueueApcThread</code>  modern variants use <code>SetWindowLongPtr</code> + window subclass abuse instead, which is harder to ring-fence. <strong>Original AtomBombing (2016 PoC): caught reliably. Modern variants: harder.</strong>
   </div>
 
   <hr class="rule">
@@ -922,10 +922,10 @@ description: "Six modern injection techniques — thread hijacking, AtomBombing,
       <div class="mitre">MITRE T1055 (variant); related to T1574</div>
       <div class="year">~2019 (Forrest Orr, William Knowles), 2024+ active in HijackLoader/IDATLoader</div>
     </div>
-    <p class="summary">Load a benign signed DLL into the target (or use one already loaded). Overwrite its <code>.text</code> section with shellcode. Execute. Call-stack analysis sees frames inside <code>amsi.dll</code> or <code>winmm.dll</code> &mdash; legitimate modules &mdash; instead of unbacked private memory.</p>
+    <p class="summary">Load a benign signed DLL into the target (or use one already loaded). Overwrite its <code>.text</code> section with shellcode. Execute. Call-stack analysis sees frames inside <code>amsi.dll</code> or <code>winmm.dll</code>  legitimate modules  instead of unbacked private memory.</p>
   </div>
 
-  <p>This is the technique that defeats kernel call-stack analysis as a detection method. The basic problem with classic injection: when a syscall fires, the EDR walks the call stack, asks "does each return address map to a known-good module?" If the answer for any frame is "no, this is private RWX memory," it's malicious. Module stomping makes the answer "yes, the frame is in <code>winmm.dll</code>" &mdash; even though the bytes <em>at</em> that address are now your shellcode.</p>
+  <p>This is the technique that defeats kernel call-stack analysis as a detection method. The basic problem with classic injection: when a syscall fires, the EDR walks the call stack, asks "does each return address map to a known-good module?" If the answer for any frame is "no, this is private RWX memory," it's malicious. Module stomping makes the answer "yes, the frame is in <code>winmm.dll</code>"  even though the bytes <em>at</em> that address are now your shellcode.</p>
 
   <div class="flow">
     <div class="caption">canonical flow &middot; module stomping</div>
@@ -964,7 +964,7 @@ description: "Six modern injection techniques — thread hijacking, AtomBombing,
   <p>Refined variants address remaining IOCs:</p>
 
   <ul style="font-family: var(--serif); color: var(--ink); padding-left: 24px;">
-    <li style="margin-bottom: 10px;"><strong>Module Overloading</strong> (Forrest Orr, 2019): instead of overwriting an existing DLL, <em>map a fresh DLL into private memory yourself, then patch its <code>.text</code></em>. The payload-bearing DLL is "legitimately loaded" from the EDR's perspective &mdash; but the file backing it is one you wrote. Mitigates the integrity-check detection angle.</li>
+    <li style="margin-bottom: 10px;"><strong>Module Overloading</strong> (Forrest Orr, 2019): instead of overwriting an existing DLL, <em>map a fresh DLL into private memory yourself, then patch its <code>.text</code></em>. The payload-bearing DLL is "legitimately loaded" from the EDR's perspective  but the file backing it is one you wrote. Mitigates the integrity-check detection angle.</li>
     <li style="margin-bottom: 10px;"><strong>Module Shifting</strong> (naksyn, 2024+): write the payload to a non-<code>.text</code> section of the hosting DLL (e.g., <code>.rdata</code> if it has executable hosts, or pad-aligned regions in <code>.text</code>). Reduces the byte-count of overwritten legitimate code, so behavioral diff detectors miss it.</li>
     <li><strong>Restoring on completion</strong>: after shellcode runs, the malware writes the original bytes back. The DLL appears unmodified to any post-incident scan.</li>
   </ul>
@@ -972,7 +972,7 @@ description: "Six modern injection techniques — thread hijacking, AtomBombing,
   <p>HijackLoader (also known as IDATLoader, GHOSTPULSE, SHADOWLADDER) is the canonical real-world deployment. It's used by LummaC2, Rhadamanthys, SectopRAT, AsyncRAT, Amadey, QuasarRAT, Tofsee, Remcos. VMRay's 2025.2 release added explicit module-stomping detection driven directly by HijackLoader analysis; CrowdStrike's 2025 blog series on hooks and stomps covers the call-stack-aware detection logic.</p>
 
   <div class="telemetry">
-    <strong>What fires in 2026:</strong> the <em>protection change</em> on a non-image private region is rarely watched, but the protection change on an <em>image's <code>.text</code> section</em> is. <code>NtProtectVirtualMemory</code> targeting a memory region inside a mapped image, changing protection to include write, is the highest-fidelity signal &mdash; same chokepoint as the unhook detection in vol. 06. Sysmon Event ID 25 catches the in-memory image hash mismatch. <strong>Caught reliably by Defender, Elastic Defend, CrowdStrike. Module Overloading and Shifting variants reduce signal but don't eliminate it.</strong>
+    <strong>What fires in 2026:</strong> the <em>protection change</em> on a non-image private region is rarely watched, but the protection change on an <em>image's <code>.text</code> section</em> is. <code>NtProtectVirtualMemory</code> targeting a memory region inside a mapped image, changing protection to include write, is the highest-fidelity signal  same chokepoint as the unhook detection in vol. 06. Sysmon Event ID 25 catches the in-memory image hash mismatch. <strong>Caught reliably by Defender, Elastic Defend, CrowdStrike. Module Overloading and Shifting variants reduce signal but don't eliminate it.</strong>
   </div>
 
   <hr class="rule">
@@ -987,12 +987,12 @@ description: "Six modern injection techniques — thread hijacking, AtomBombing,
       <div class="mitre">no formal MITRE ID</div>
       <div class="year">February 2024 (Marcus Hutchins / MalwareTech)</div>
     </div>
-    <p class="summary">Hijack <code>ntdll!AvrfpAPILookupCallbackRoutine</code> in a freshly-spawned suspended process. When the new process resumes and <code>LdrLoadDll</code> begins loading dependencies, that callback fires &mdash; before <code>kernel32.dll</code> even loads. Your shellcode runs in a process where the EDR's DLL has not yet been injected.</p>
+    <p class="summary">Hijack <code>ntdll!AvrfpAPILookupCallbackRoutine</code> in a freshly-spawned suspended process. When the new process resumes and <code>LdrLoadDll</code> begins loading dependencies, that callback fires  before <code>kernel32.dll</code> even loads. Your shellcode runs in a process where the EDR's DLL has not yet been injected.</p>
   </div>
 
   <p>Recall vol. 04's loader call chain. When a process starts, <code>LdrInitializeThunk</code> calls <code>LdrpInitialize</code> &rarr; <code>LdrpInitializeProcess</code> &rarr; (loads dependencies via <code>LdrLoadDll</code>) &rarr; (eventually) drains the APC queue and calls <code>main</code>. The EDR's DLL is loaded as one of those dependencies. <em>Code that runs <strong>during</strong> the dependency-loading phase, before the EDR DLL is mapped, runs in a process where there are no hooks, no ETW user-mode subscriptions, no nothing.</em></p>
 
-  <p>Hutchins's insight (February 2024): inside <code>LdrLoadDll</code>, before <code>kernel32.dll</code> initialization completes, the loader calls a verifier callback through <code>ntdll!AvrfpAPILookupCallbackRoutine</code> &mdash; a function pointer in <code>ntdll</code> itself, gated by a boolean <code>ntdll!AvrfpAPILookupCallbacksEnabled</code>. The pointer is normally null and the boolean false. <em>If you can write to the suspended process's <code>ntdll</code> data section to set the pointer to your shellcode and the boolean to <code>1</code>, the loader will call your shellcode during its own dependency walk.</em></p>
+  <p>Hutchins's insight (February 2024): inside <code>LdrLoadDll</code>, before <code>kernel32.dll</code> initialization completes, the loader calls a verifier callback through <code>ntdll!AvrfpAPILookupCallbackRoutine</code>  a function pointer in <code>ntdll</code> itself, gated by a boolean <code>ntdll!AvrfpAPILookupCallbacksEnabled</code>. The pointer is normally null and the boolean false. <em>If you can write to the suspended process's <code>ntdll</code> data section to set the pointer to your shellcode and the boolean to <code>1</code>, the loader will call your shellcode during its own dependency walk.</em></p>
 
   <div class="flow">
     <div class="caption">canonical flow &middot; EDR-Preloading (Hutchins, Feb 2024)</div>
@@ -1030,10 +1030,10 @@ description: "Six modern injection techniques — thread hijacking, AtomBombing,
 
   <div class="callout">
     <div class="label">why this is a structural breakthrough, not a tactical trick</div>
-    <p>Every previous injection technique we've covered targets a process <em>that has already booted</em> &mdash; meaning the EDR DLL is loaded, hooks are placed, and the EDR's user-mode telemetry pipeline is alive. EDR-Preloading attacks <em>before</em> any of that is true. It runs in a window of milliseconds when only <code>ntdll</code> is mapped. There are no user-mode hooks to bypass because no user-mode hooks have been installed yet. <em>This is qualitatively different from every technique in part 1 and the earlier sections of part 2.</em></p>
+    <p>Every previous injection technique we've covered targets a process <em>that has already booted</em>  meaning the EDR DLL is loaded, hooks are placed, and the EDR's user-mode telemetry pipeline is alive. EDR-Preloading attacks <em>before</em> any of that is true. It runs in a window of milliseconds when only <code>ntdll</code> is mapped. There are no user-mode hooks to bypass because no user-mode hooks have been installed yet. <em>This is qualitatively different from every technique in part 1 and the earlier sections of part 2.</em></p>
   </div>
 
-  <p>The key constraint: the parent process &mdash; the one creating the suspended child &mdash; is still being watched. The cross-process writes still fire <code>WRITEVM_REMOTE</code> in the parent's context. So EDR-Preloading evades detection in the <em>child</em> at the cost of generating telemetry in the <em>parent</em>. If the parent itself is unhooked or pre-existing-trusted, this is a win. If the parent is the very payload the user just downloaded, the writes still get caught.</p>
+  <p>The key constraint: the parent process  the one creating the suspended child  is still being watched. The cross-process writes still fire <code>WRITEVM_REMOTE</code> in the parent's context. So EDR-Preloading evades detection in the <em>child</em> at the cost of generating telemetry in the <em>parent</em>. If the parent itself is unhooked or pre-existing-trusted, this is a win. If the parent is the very payload the user just downloaded, the writes still get caught.</p>
 
   <hr class="rule">
 
@@ -1047,17 +1047,17 @@ description: "Six modern injection techniques — thread hijacking, AtomBombing,
       <div class="mitre">no formal MITRE ID</div>
       <div class="year">October 2024 (Guido Miggelenbrink, Outflank)</div>
     </div>
-    <p class="summary">Combine EDR-Preloading's pre-EDR-load timing with Early Bird's APC-driven execution &mdash; but without cross-process APC queuing. Inject a two-part payload, hijack the shim engine callback, fire the second part in the child with no parent-side APC visible.</p>
+    <p class="summary">Combine EDR-Preloading's pre-EDR-load timing with Early Bird's APC-driven execution  but without cross-process APC queuing. Inject a two-part payload, hijack the shim engine callback, fire the second part in the child with no parent-side APC visible.</p>
   </div>
 
-  <p>Outflank's research (October 2024) generalizes EDR-Preloading. Hutchins's original used the verifier callback specifically; Outflank's variant uses the <strong>shim engine callback</strong> path inside <code>ntdll</code>'s <code>LdrLoadDll</code> &mdash; a path that fires reliably on every process startup, with the same "before EDR loads" timing.</p>
+  <p>Outflank's research (October 2024) generalizes EDR-Preloading. Hutchins's original used the verifier callback specifically; Outflank's variant uses the <strong>shim engine callback</strong> path inside <code>ntdll</code>'s <code>LdrLoadDll</code>  a path that fires reliably on every process startup, with the same "before EDR loads" timing.</p>
 
   <p>The structural improvements over EDR-Preloading and Early Bird:</p>
 
   <ul style="font-family: var(--serif); color: var(--ink); padding-left: 24px;">
     <li style="margin-bottom: 10px;"><strong>No cross-process APC.</strong> Early Bird's signature IOC (<code>NtQueueApcThread</code> from parent to suspended child) is gone. The execution trigger is a callback inside the <em>child's own <code>ntdll</code></em>, fired by the loader itself, not by an external APC.</li>
     <li style="margin-bottom: 10px;"><strong>Writes go to <code>.mrdata</code> / <code>.data</code>.</strong> Both sections are writable by default in <code>ntdll</code>. The protection-change call (<code>NtProtectVirtualMemory</code>) that classic injection requires is avoided. <code>WRITEVM_REMOTE</code> still fires, but the target region is a normal data section, not RWX private memory or an image's <code>.text</code>.</li>
-    <li><strong>Two-stage payload.</strong> Stage 1 is tiny (just enough to hijack the callback). Stage 2 is the real payload, queued via in-process APC after stage 1 fires &mdash; so even if cross-process telemetry catches stage 1's setup, the actual malicious work happens via local APC, which is heavily backgrounded in normal operation.</li>
+    <li><strong>Two-stage payload.</strong> Stage 1 is tiny (just enough to hijack the callback). Stage 2 is the real payload, queued via in-process APC after stage 1 fires  so even if cross-process telemetry catches stage 1's setup, the actual malicious work happens via local APC, which is heavily backgrounded in normal operation.</li>
   </ul>
 
   <p>Outflank's report tested Early Cascade against several "top tier EDRs" (vendor names redacted in their public post) and found it defeated user-mode detection in all of them. Multiple PoCs are publicly available: <code>0xNinjaCyclone/EarlyCascade</code> (shim engine variant), <code>Cracked5pider/earlycascade-injection</code>, <code>vvinoth/Early-Cascade-Injection</code>.</p>
@@ -1067,13 +1067,13 @@ description: "Six modern injection techniques — thread hijacking, AtomBombing,
   </div>
 
   <div class="telemetry">
-    <strong>What fires in 2026:</strong> in the parent &mdash; <code>WRITEVM_REMOTE</code> events targeting <code>ntdll.data</code>/<code>ntdll.mrdata</code> in a suspended child. Combined with absence of standard imports being mapped (no <code>kernel32</code> yet), this is a near-unique pattern. The rule template: "any cross-process write to a known-image data section in a suspended target whose import resolution has not completed" → high-confidence Early Cascade. False positive rate is low because legitimate cross-process write at this stage of process startup is essentially nonexistent.
+    <strong>What fires in 2026:</strong> in the parent  <code>WRITEVM_REMOTE</code> events targeting <code>ntdll.data</code>/<code>ntdll.mrdata</code> in a suspended child. Combined with absence of standard imports being mapped (no <code>kernel32</code> yet), this is a near-unique pattern. The rule template: "any cross-process write to a known-image data section in a suspended target whose import resolution has not completed" → high-confidence Early Cascade. False positive rate is low because legitimate cross-process write at this stage of process startup is essentially nonexistent.
   </div>
 
   <hr class="rule">
 
   <!-- ========== § 08 ========== -->
-  <h2><span class="num">§ 08</span> Detection in 2026 &mdash; the call-stack era</h2>
+  <h2><span class="num">§ 08</span> Detection in 2026  the call-stack era</h2>
   <p class="sub">Five chokepoints, refined.</p>
 
   <p>Vol. 07 listed five detection chokepoints. By the techniques in this volume, two of them are obsoleted by sufficiently careful malware (in-memory PE hash diff is bypassable by module shifting/restoring; FileObject inspection only catches the old image-tampering family). The remaining three become more important, and two new ones become decisive in 2026:</p>
@@ -1085,11 +1085,11 @@ description: "Six modern injection techniques — thread hijacking, AtomBombing,
     </div>
     <div class="take blue">
       <h5>2 &middot; Cross-process write target classification</h5>
-      <p>Modern rules don't just detect <code>NtWriteVirtualMemory</code> cross-process &mdash; they classify the target region: private RWX, image's <code>.text</code>, image's data section, thread stack, or normal heap. WTH writes to thread stacks; Early Cascade writes to <code>ntdll.data</code>. Both are now distinct signal categories with their own rules.</p>
+      <p>Modern rules don't just detect <code>NtWriteVirtualMemory</code> cross-process  they classify the target region: private RWX, image's <code>.text</code>, image's data section, thread stack, or normal heap. WTH writes to thread stacks; Early Cascade writes to <code>ntdll.data</code>. Both are now distinct signal categories with their own rules.</p>
     </div>
     <div class="take blue">
       <h5>3 &middot; ETW-TI THREATINT_PROTECTVM_LOCAL on image regions</h5>
-      <p>Protection changes on memory regions inside a mapped image &mdash; particularly <code>.text</code> sections &mdash; are the most reliable single signal in 2026. Module stomping and module overloading both trigger this. Early Cascade specifically avoids it by writing to already-writable sections.</p>
+      <p>Protection changes on memory regions inside a mapped image  particularly <code>.text</code> sections  are the most reliable single signal in 2026. Module stomping and module overloading both trigger this. Early Cascade specifically avoids it by writing to already-writable sections.</p>
     </div>
     <div class="take blue">
       <h5>4 &middot; Process-startup phase awareness</h5>
@@ -1111,22 +1111,22 @@ description: "Six modern injection techniques — thread hijacking, AtomBombing,
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
       <div class="q">What's the structural advantage of Thread Execution Hijacking over classic remote thread injection, and what's its remaining IOC?</div>
-      <div class="a">No new thread is created &mdash; <code>PsSetCreateThreadNotifyRoutine</code> never fires. The hijacked thread continues running in the legitimate process, just at a different address. Remaining IOC: <code>NtSetContextThread</code> on a remote thread fires <code>Microsoft-Windows-Kernel-Audit-API-Calls</code> ETW events, and the <code>OpenThread</code> with <code>THREAD_SUSPEND_RESUME | SET_CONTEXT</code> rights is a high-fidelity composite when paired with subsequent <code>NtSuspendThread</code>. Stable detection in 2026.</div>
+      <div class="a">No new thread is created  <code>PsSetCreateThreadNotifyRoutine</code> never fires. The hijacked thread continues running in the legitimate process, just at a different address. Remaining IOC: <code>NtSetContextThread</code> on a remote thread fires <code>Microsoft-Windows-Kernel-Audit-API-Calls</code> ETW events, and the <code>OpenThread</code> with <code>THREAD_SUSPEND_RESUME | SET_CONTEXT</code> rights is a high-fidelity composite when paired with subsequent <code>NtSuspendThread</code>. Stable detection in 2026.</div>
     </div>
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
       <div class="q">Waiting Thread Hijacking (April 2025) avoids two specific APIs that older techniques rely on. Which two, and what does it use instead?</div>
-      <div class="a">Avoids <code>SuspendThread</code>/<code>ResumeThread</code> and <code>SetThreadContext</code>/<code>NtSetContextThread</code> &mdash; the two highest-fidelity IOCs of classic thread hijacking. Instead, it finds threads already blocked in waits (e.g., <code>WaitForSingleObjectEx</code>) and overwrites the return address on their kernel stack via <code>WriteProcessMemory</code>. When the wait completes, the thread "returns" to the attacker's shellcode. Cross-process write still fires telemetry, but the target is a stack region rather than RWX or <code>.text</code>.</div>
+      <div class="a">Avoids <code>SuspendThread</code>/<code>ResumeThread</code> and <code>SetThreadContext</code>/<code>NtSetContextThread</code>  the two highest-fidelity IOCs of classic thread hijacking. Instead, it finds threads already blocked in waits (e.g., <code>WaitForSingleObjectEx</code>) and overwrites the return address on their kernel stack via <code>WriteProcessMemory</code>. When the wait completes, the thread "returns" to the attacker's shellcode. Cross-process write still fires telemetry, but the target is a stack region rather than RWX or <code>.text</code>.</div>
     </div>
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
       <div class="q">In AtomBombing, how does shellcode get into the target process without <code>WriteProcessMemory</code>?</div>
-      <div class="a">The attacker stores shellcode bytes in the global atom table via <code>GlobalAddAtom</code> in their own process. Then they queue an APC to a target thread pointing at <code>GlobalGetAtomNameA</code> (with <code>NtQueueApcThread</code>'s extended argument form). When the APC fires, the <em>target process</em> calls <code>GlobalGetAtomName</code> on its own &mdash; which copies the atom data (the shellcode) into a destination buffer the attacker specified. The kernel handles the copy; from the EDR's viewpoint, no remote write happened. Execution still requires conventional APC + ROP, which is the part that gets caught.</div>
+      <div class="a">The attacker stores shellcode bytes in the global atom table via <code>GlobalAddAtom</code> in their own process. Then they queue an APC to a target thread pointing at <code>GlobalGetAtomNameA</code> (with <code>NtQueueApcThread</code>'s extended argument form). When the APC fires, the <em>target process</em> calls <code>GlobalGetAtomName</code> on its own  which copies the atom data (the shellcode) into a destination buffer the attacker specified. The kernel handles the copy; from the EDR's viewpoint, no remote write happened. Execution still requires conventional APC + ROP, which is the part that gets caught.</div>
     </div>
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
       <div class="q">Why is Module Stomping the technique that specifically defeats kernel call-stack analysis?</div>
-      <div class="a">Kernel call-stack analysis asks "does each frame's return address resolve to a backed image?" Classic injection writes shellcode to private RWX memory, so when the shellcode runs, the call stack contains a frame in private memory &mdash; immediate red flag. Module stomping overwrites the <code>.text</code> section of a legitimate loaded DLL (e.g., <code>winmm.dll</code>). The shellcode now lives at an address inside a <em>signed, mapped, expected</em> module. The call stack frame resolves to <code>winmm.dll</code> &mdash; legitimate to a heuristic that doesn't check the bytes match the on-disk file.</div>
+      <div class="a">Kernel call-stack analysis asks "does each frame's return address resolve to a backed image?" Classic injection writes shellcode to private RWX memory, so when the shellcode runs, the call stack contains a frame in private memory  immediate red flag. Module stomping overwrites the <code>.text</code> section of a legitimate loaded DLL (e.g., <code>winmm.dll</code>). The shellcode now lives at an address inside a <em>signed, mapped, expected</em> module. The call stack frame resolves to <code>winmm.dll</code>  legitimate to a heuristic that doesn't check the bytes match the on-disk file.</div>
     </div>
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
@@ -1136,47 +1136,47 @@ description: "Six modern injection techniques — thread hijacking, AtomBombing,
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
       <div class="q">In EDR-Preloading (Hutchins, Feb 2024), what specifically gets hijacked, and why does it run before the EDR DLL is loaded?</div>
-      <div class="a">Two values in <code>ntdll</code>'s data section: <code>ntdll!AvrfpAPILookupCallbackRoutine</code> (a function pointer) and <code>ntdll!AvrfpAPILookupCallbacksEnabled</code> (a boolean). The attacker writes the shellcode address to the pointer and <code>1</code> to the boolean from the parent process (target is in <code>CREATE_SUSPENDED</code>). When the target resumes, <code>LdrInitializeThunk</code> &rarr; <code>LdrLoadDll</code> begins loading dependencies. Inside that initialization path, <em>before <code>kernel32.dll</code> initialization completes</em>, the verifier callback fires &mdash; calling the attacker's shellcode in a process where only <code>ntdll</code> is loaded. The EDR's DLL isn't mapped yet, so no user-mode hooks exist to evade.</div>
+      <div class="a">Two values in <code>ntdll</code>'s data section: <code>ntdll!AvrfpAPILookupCallbackRoutine</code> (a function pointer) and <code>ntdll!AvrfpAPILookupCallbacksEnabled</code> (a boolean). The attacker writes the shellcode address to the pointer and <code>1</code> to the boolean from the parent process (target is in <code>CREATE_SUSPENDED</code>). When the target resumes, <code>LdrInitializeThunk</code> &rarr; <code>LdrLoadDll</code> begins loading dependencies. Inside that initialization path, <em>before <code>kernel32.dll</code> initialization completes</em>, the verifier callback fires  calling the attacker's shellcode in a process where only <code>ntdll</code> is loaded. The EDR's DLL isn't mapped yet, so no user-mode hooks exist to evade.</div>
     </div>
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
       <div class="q">Early Cascade Injection (Outflank, Oct 2024) combines two prior techniques. Which two, and what's the structural improvement over each?</div>
-      <div class="a">Combines Early Bird APC Injection and EDR-Preloading. Improvements: (1) over Early Bird &mdash; eliminates <em>cross-process APC queuing</em>; the execution trigger is an in-process callback fired by the loader, not an external <code>NtQueueApcThread</code>. (2) over EDR-Preloading &mdash; uses the shim engine callback path, which is more reliable than the verifier callback Hutchins used. Both improvements share a third trick: writes go to <code>ntdll</code>'s <code>.mrdata</code>/<code>.data</code> (already writable), avoiding a protection-change call. The technique was effective against multiple "top tier EDRs" at disclosure time; Defender for Endpoint and Elastic Defend shipped detection in early-to-mid 2026.</div>
+      <div class="a">Combines Early Bird APC Injection and EDR-Preloading. Improvements: (1) over Early Bird  eliminates <em>cross-process APC queuing</em>; the execution trigger is an in-process callback fired by the loader, not an external <code>NtQueueApcThread</code>. (2) over EDR-Preloading  uses the shim engine callback path, which is more reliable than the verifier callback Hutchins used. Both improvements share a third trick: writes go to <code>ntdll</code>'s <code>.mrdata</code>/<code>.data</code> (already writable), avoiding a protection-change call. The technique was effective against multiple "top tier EDRs" at disclosure time; Defender for Endpoint and Elastic Defend shipped detection in early-to-mid 2026.</div>
     </div>
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
       <div class="q">By 2026, kernel call-stack analysis is the dominant EDR primitive. Which detection signals replace it as decisive when techniques (like module stomping) defeat call-stack analysis?</div>
-      <div class="a">Three: (1) <em>protection changes targeting memory inside mapped images</em> &mdash; the chokepoint module stomping creates while trying to write to <code>.text</code>. (2) <em>cross-process write target classification</em> &mdash; private RWX vs. image <code>.text</code> vs. image data vs. thread stack are now separate signal categories with separate rules. (3) <em>process-startup phase awareness</em> &mdash; cross-process operations during the early phases of a child process's startup (only <code>ntdll</code> mapped) are intrinsically suspicious. Composite scoring across all five chokepoints (vol. 07 + this volume) is the actual production detection model.</div>
+      <div class="a">Three: (1) <em>protection changes targeting memory inside mapped images</em>  the chokepoint module stomping creates while trying to write to <code>.text</code>. (2) <em>cross-process write target classification</em>  private RWX vs. image <code>.text</code> vs. image data vs. thread stack are now separate signal categories with separate rules. (3) <em>process-startup phase awareness</em>  cross-process operations during the early phases of a child process's startup (only <code>ntdll</code> mapped) are intrinsically suspicious. Composite scoring across all five chokepoints (vol. 07 + this volume) is the actual production detection model.</div>
     </div>
   </div>
 
   <hr class="rule">
 
   <!-- ========== § 10 ========== -->
-  <h2><span class="num">§ 10</span> Closing thought &mdash; ARC II is now complete</h2>
+  <h2><span class="num">§ 10</span> Closing thought  ARC II is now complete</h2>
   <p>Eight volumes in. ARC II (the user-mode battlefield) is now closed:</p>
   <ul style="font-family: var(--serif); color: var(--ink); padding-left: 24px;">
-    <li style="margin-bottom: 8px;"><strong>Vol. 01</strong> &mdash; the alphabet (data types).</li>
-    <li style="margin-bottom: 8px;"><strong>Vol. 02</strong> &mdash; the static skeleton (PE format).</li>
-    <li style="margin-bottom: 8px;"><strong>Vol. 03</strong> &mdash; the living state (PEB / TEB / LDR).</li>
-    <li style="margin-bottom: 8px;"><strong>Vol. 04</strong> &mdash; the machinery that builds that state (the loader).</li>
-    <li style="margin-bottom: 8px;"><strong>Vol. 05</strong> &mdash; the border crossing (syscalls).</li>
-    <li style="margin-bottom: 8px;"><strong>Vol. 06</strong> &mdash; how the EDR rewrites bytes near that border, and how attackers undo it.</li>
-    <li style="margin-bottom: 8px;"><strong>Vol. 07</strong> &mdash; foundational injection composed from those primitives.</li>
-    <li><strong>Vol. 08</strong> &mdash; modern injection composed against the kernel-side telemetry that catches the foundational set.</li>
+    <li style="margin-bottom: 8px;"><strong>Vol. 01</strong>  the alphabet (data types).</li>
+    <li style="margin-bottom: 8px;"><strong>Vol. 02</strong>  the static skeleton (PE format).</li>
+    <li style="margin-bottom: 8px;"><strong>Vol. 03</strong>  the living state (PEB / TEB / LDR).</li>
+    <li style="margin-bottom: 8px;"><strong>Vol. 04</strong>  the machinery that builds that state (the loader).</li>
+    <li style="margin-bottom: 8px;"><strong>Vol. 05</strong>  the border crossing (syscalls).</li>
+    <li style="margin-bottom: 8px;"><strong>Vol. 06</strong>  how the EDR rewrites bytes near that border, and how attackers undo it.</li>
+    <li style="margin-bottom: 8px;"><strong>Vol. 07</strong>  foundational injection composed from those primitives.</li>
+    <li><strong>Vol. 08</strong>  modern injection composed against the kernel-side telemetry that catches the foundational set.</li>
   </ul>
 
   <p style="margin-top: 24px;">A working purple team operator in 2026 should be able to read any new injection paper, identify which detection chokepoint it targets, predict which EDRs catch it and which don't, and design the corresponding hunt query. A working detection engineer should be able to look at any cross-process telemetry event and know which technique generated it. That's what ARC II was for. The composability is the point.</p>
 
   <p>The honest 2026 state of play: <em>against legacy AVs, every technique in vols. 06&ndash;08 still works. Against mature commercial EDRs (Defender for Endpoint, CrowdStrike Falcon, SentinelOne, Elastic Defend) running with kernel callstack capture and ETW-TI consumption enabled, the techniques in part 1 are reliably caught, and the techniques in part 2 are caught with delays of 6&ndash;18 months from disclosure to signature</em>. Early Cascade Injection (October 2024) has had detection added to Defender by early 2026. Waiting Thread Hijacking (April 2025) has had detection added by late 2025. The detection arms race is real, and the vendors are keeping up.</p>
 
-  <p>For offensive operations, this means the lifespan of any single technique is roughly its time-to-disclosure plus the EDR detection cycle. The modern operator's competitive advantage isn't a single bypass &mdash; it's the ability to compose, to chain unobtrusive primitives in unique combinations, and to be telemetry-aware. For defensive operations, this means hunt rules need to be composite, not single-signal, and they need updating with every research disclosure.</p>
+  <p>For offensive operations, this means the lifespan of any single technique is roughly its time-to-disclosure plus the EDR detection cycle. The modern operator's competitive advantage isn't a single bypass  it's the ability to compose, to chain unobtrusive primitives in unique combinations, and to be telemetry-aware. For defensive operations, this means hunt rules need to be composite, not single-signal, and they need updating with every research disclosure.</p>
 
-  <p>Next: <em class="pen">Vol. 09 &mdash; Memory Manipulation Primitives</em>. ARC II ends here; ARC III begins. We dive into the memory primitives that underpin everything we've covered: <code>VirtualAlloc</code>'s real semantics, W^X enforcement, sleep masks (Ekko, FOLIAGE, Cronos, Foliage), pe-sieve and hollows_hunter as the canonical defensive scanners, and the 2024+ generation of memory-IOC-aware loaders. After that, ARC III continues into kernel-side topics: kernel callbacks, ETW deep dive, PPL, and BYOVD attacks.</p>
+  <p>Next: <em class="pen">Vol. 09  Memory Manipulation Primitives</em>. ARC II ends here; ARC III begins. We dive into the memory primitives that underpin everything we've covered: <code>VirtualAlloc</code>'s real semantics, W^X enforcement, sleep masks (Ekko, FOLIAGE, Cronos, Foliage), pe-sieve and hollows_hunter as the canonical defensive scanners, and the 2024+ generation of memory-IOC-aware loaders. After that, ARC III continues into kernel-side topics: kernel callbacks, ETW deep dive, PPL, and BYOVD attacks.</p>
 
   <footer class="end">
     <div>filed under &middot; windows internals &middot; process injection &middot; arc ii closed</div>
-    <div class="sig">&mdash; blacksunCUBE</div>
+    <div class="sig"> blacksunCUBE</div>
   </footer>
 
 </div>
