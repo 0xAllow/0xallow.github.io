@@ -1,0 +1,1251 @@
+---
+layout: null
+title: "Process Injection — Part 1"
+volume: "07"
+entry: "01"
+order: 701
+date: 2026-04-26
+description: "Seven classic techniques for running code inside someone else's process — composed from the primitives of vol. 02 through vol. 06, with the kernel telemetry each one fires."
+---
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Process Injection — Part 1 — a field notebook</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #14161a;
+    --bg-soft: #1b1e24;
+    --bg-card: #1f232a;
+    --ink: #e8e4d8;
+    --ink-dim: #a8a396;
+    --ink-faint: #6d6a5f;
+    --rule: #2b2f38;
+
+    --read:  #5ec2e0;
+    --read-bg: rgba(94,194,224,0.10);
+    --read-border: rgba(94,194,224,0.38);
+
+    --write: #e8b64a;
+    --write-bg: rgba(232,182,74,0.10);
+    --write-border: rgba(232,182,74,0.42);
+
+    --exec:  #e8624a;
+    --exec-bg: rgba(232,98,74,0.10);
+    --exec-border: rgba(232,98,74,0.42);
+
+    --pen:   #d9456b;
+    --pen-bg: rgba(217,69,107,0.10);
+
+    --tele:  #a590d9;
+    --tele-bg: rgba(165,144,217,0.10);
+    --tele-border: rgba(165,144,217,0.40);
+
+    --mono: 'JetBrains Mono', ui-monospace, monospace;
+    --serif: 'Crimson Pro', 'Iowan Old Style', 'Palatino', serif;
+    --sans: 'Space Grotesk', system-ui, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--serif);
+    font-size: 18px;
+    line-height: 1.65;
+    background-image:
+      radial-gradient(circle at 20% 10%, rgba(94,194,224,0.04) 0%, transparent 40%),
+      radial-gradient(circle at 85% 80%, rgba(232,98,74,0.04) 0%, transparent 45%),
+      repeating-linear-gradient(0deg, transparent 0, transparent 2px, rgba(255,255,255,0.006) 2px, rgba(255,255,255,0.006) 3px);
+    min-height: 100vh;
+  }
+
+  body::before {
+    content: "";
+    position: fixed; inset: 0;
+    pointer-events: none;
+    opacity: 0.035;
+    z-index: 0;
+    background-image: url("data:image/svg+xml;utf8,<svg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  }
+
+  .wrap { max-width: 920px; margin: 0 auto; padding: 80px 32px 160px; position: relative; z-index: 1; }
+
+  .masthead {
+    border-top: 2px solid var(--ink);
+    border-bottom: 1px solid var(--rule);
+    padding: 22px 0 18px;
+    margin-bottom: 72px;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+  .masthead .brand {
+    font-family: var(--sans);
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    font-size: 12px;
+    color: var(--ink-dim);
+  }
+  .masthead .brand span { color: var(--exec); }
+  .masthead .meta {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-faint);
+    letter-spacing: 0.05em;
+  }
+
+  h1 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: clamp(42px, 6vw, 64px);
+    line-height: 1.05;
+    letter-spacing: -0.015em;
+    margin: 0 0 14px;
+    color: var(--ink);
+  }
+  h1 em { font-style: italic; color: var(--ink-dim); font-weight: 400; }
+
+  .dek {
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 21px;
+    color: var(--ink-dim);
+    max-width: 640px;
+    margin: 0 0 24px;
+    line-height: 1.45;
+  }
+  .byline {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-faint);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 80px;
+    padding-bottom: 40px;
+    border-bottom: 1px dashed var(--rule);
+  }
+  .byline em { color: var(--pen); font-style: normal; }
+
+  h2 {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 26px;
+    letter-spacing: -0.01em;
+    margin: 80px 0 6px;
+    color: var(--ink);
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+  }
+  h2 .num {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--ink-faint);
+    letter-spacing: 0.1em;
+  }
+  h2 + .sub {
+    font-family: var(--serif);
+    font-style: italic;
+    color: var(--ink-dim);
+    margin: 0 0 32px;
+    font-size: 17px;
+  }
+
+  h3 {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 17px;
+    letter-spacing: 0.01em;
+    margin: 36px 0 10px;
+    color: var(--ink);
+  }
+
+  p { margin: 0 0 18px; }
+
+  code, .kw {
+    font-family: var(--mono);
+    font-size: 0.86em;
+    background: var(--bg-soft);
+    padding: 2px 6px;
+    border-radius: 3px;
+    color: var(--ink);
+    border: 1px solid var(--rule);
+  }
+
+  strong { color: var(--ink); font-weight: 600; }
+  em.pen { color: var(--pen); font-style: italic; font-weight: 500; }
+
+  .legend {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0;
+    margin: 0 0 56px;
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    overflow: hidden;
+    background: var(--bg-card);
+  }
+  .legend-item { padding: 22px 20px; border-right: 1px solid var(--rule); }
+  .legend-item:last-child { border-right: none; }
+  .legend-item .tag {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 2px;
+  }
+  .legend-item.r .tag { background: var(--read-bg); color: var(--read); border: 1px solid var(--read-border); }
+  .legend-item.w .tag { background: var(--write-bg); color: var(--write); border: 1px solid var(--write-border); }
+  .legend-item.x .tag { background: var(--exec-bg); color: var(--exec); border: 1px solid var(--exec-border); }
+  .legend-item h4 {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 15px;
+    margin: 0 0 6px;
+    color: var(--ink);
+  }
+  .legend-item p {
+    font-family: var(--serif);
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--ink-dim);
+    margin: 0;
+  }
+  @media (max-width: 680px) {
+    .legend { grid-template-columns: 1fr; }
+    .legend-item { border-right: none; border-bottom: 1px solid var(--rule); }
+    .legend-item:last-child { border-bottom: none; }
+  }
+
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--rule);
+    border-radius: 3px;
+    padding: 24px 26px;
+    margin: 24px 0;
+  }
+  .card.read  { border-left-color: var(--read); }
+  .card.write { border-left-color: var(--write); }
+  .card.exec  { border-left-color: var(--exec); }
+
+  .card-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+  .card-head .type-name {
+    font-family: var(--mono);
+    font-weight: 700;
+    font-size: 17px;
+    color: var(--ink);
+  }
+  .tags { display: flex; gap: 6px; margin-left: auto; }
+  .pill {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    padding: 3px 8px;
+    border-radius: 2px;
+    text-transform: uppercase;
+  }
+  .pill.r { background: var(--read-bg); color: var(--read); border: 1px solid var(--read-border); }
+  .pill.w { background: var(--write-bg); color: var(--write); border: 1px solid var(--write-border); }
+  .pill.x { background: var(--exec-bg); color: var(--exec); border: 1px solid var(--exec-border); }
+
+  .gloss {
+    font-family: var(--serif);
+    font-style: italic;
+    color: var(--ink-dim);
+    font-size: 15px;
+    margin: 0 0 12px;
+  }
+
+  pre {
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.6;
+    background: #0f1116;
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    padding: 16px 18px;
+    overflow-x: auto;
+    margin: 14px 0;
+    color: #cdd1d8;
+  }
+  pre .c  { color: var(--ink-faint); font-style: italic; }
+  pre .k  { color: #b98dd0; }
+  pre .t  { color: #7dc9a9; }
+  pre .s  { color: #d8b36b; }
+  pre .n  { color: #e89069; }
+  pre .fn { color: #6db6d6; }
+  pre .m  { color: var(--pen); }
+  pre .fld { color: var(--write); }
+  pre .off { color: var(--tele); }
+
+  .hl-r { background: var(--read-bg); color: var(--read); padding: 1px 4px; border-radius: 2px; }
+  .hl-w { background: var(--write-bg); color: var(--write); padding: 1px 4px; border-radius: 2px; }
+  .hl-x { background: var(--exec-bg); color: var(--exec); padding: 1px 4px; border-radius: 2px; }
+
+  .margin {
+    border-left: 2px solid var(--pen);
+    background: var(--pen-bg);
+    padding: 14px 16px 14px 18px;
+    margin: 20px 0;
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 15px;
+    color: var(--ink);
+    line-height: 1.55;
+    position: relative;
+  }
+  .margin::before {
+    content: "margin note";
+    position: absolute;
+    top: -9px;
+    left: 14px;
+    background: var(--bg);
+    padding: 0 8px;
+    font-family: var(--mono);
+    font-size: 10px;
+    font-style: normal;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--pen);
+  }
+
+  .telemetry {
+    border: 1px solid var(--tele-border);
+    background: var(--tele-bg);
+    padding: 14px 16px 14px 18px;
+    margin: 20px 0;
+    border-radius: 3px;
+    position: relative;
+    font-family: var(--serif);
+    font-size: 14.5px;
+    line-height: 1.55;
+    color: var(--ink);
+  }
+  .telemetry::before {
+    content: "telemetry handoff";
+    position: absolute;
+    top: -9px;
+    left: 14px;
+    background: var(--bg);
+    padding: 0 8px;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--tele);
+  }
+  .telemetry strong { color: var(--tele); font-weight: 600; }
+  .telemetry code { font-size: 0.85em; }
+
+  .twin {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin: 20px 0;
+  }
+  @media (max-width: 680px) { .twin { grid-template-columns: 1fr; } }
+  .take {
+    background: var(--bg-soft);
+    border: 1px solid var(--rule);
+    padding: 16px 18px;
+    border-radius: 3px;
+  }
+  .take h5 {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    margin: 0 0 10px;
+  }
+  .take.red h5  { color: var(--exec); }
+  .take.blue h5 { color: var(--read); }
+  .take p { font-size: 14px; line-height: 1.55; margin: 0; color: var(--ink-dim); }
+  .take p strong { color: var(--ink); }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 24px 0;
+    font-size: 14px;
+  }
+  th, td {
+    text-align: left;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+  }
+  th {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+    border-bottom: 2px solid var(--ink);
+  }
+  td { font-family: var(--serif); color: var(--ink); }
+  td:first-child {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--ink);
+    width: 32%;
+  }
+
+  /* technique flow diagram */
+  .flow {
+    margin: 28px 0;
+    padding: 24px;
+    background: #0f1116;
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+  }
+  .flow .caption {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-bottom: 18px;
+  }
+  .step {
+    display: grid;
+    grid-template-columns: 32px 1fr 1.4fr;
+    gap: 12px;
+    align-items: center;
+    padding: 10px 14px;
+    border: 1px solid var(--rule);
+    background: var(--bg-card);
+    margin-bottom: 4px;
+    border-left: 3px solid var(--ink-faint);
+  }
+  .step.r { border-left-color: var(--read); }
+  .step.w { border-left-color: var(--write); }
+  .step.x { border-left-color: var(--exec); }
+  .step.t { border-left-color: var(--tele); }
+  .step.p { border-left-color: var(--pen); }
+  .step .n {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-faint);
+    font-weight: 700;
+  }
+  .step .api {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--ink);
+  }
+  .step .role {
+    font-family: var(--serif);
+    font-style: italic;
+    color: var(--ink-dim);
+    font-size: 13.5px;
+  }
+  @media (max-width: 680px) {
+    .step { grid-template-columns: 26px 1fr; }
+    .step .role { display: none; }
+  }
+
+  /* technique block */
+  .technique {
+    background: var(--bg-card);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--rule);
+    border-radius: 3px;
+    padding: 22px 26px;
+    margin: 32px 0;
+  }
+  .technique .head {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 8px;
+  }
+  .technique .name {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 22px;
+    color: var(--ink);
+  }
+  .technique .mitre {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--tele);
+    letter-spacing: 0.05em;
+  }
+  .technique .year {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-faint);
+    margin-left: auto;
+  }
+  .technique .summary {
+    font-family: var(--serif);
+    font-style: italic;
+    color: var(--ink-dim);
+    font-size: 16px;
+    margin-bottom: 12px;
+  }
+  .technique.t1 { border-left-color: var(--read); }
+  .technique.t2 { border-left-color: var(--write); }
+  .technique.t3 { border-left-color: var(--exec); }
+  .technique.t4 { border-left-color: var(--pen); }
+  .technique.t5 { border-left-color: var(--tele); }
+
+  /* compact comparison table */
+  .compare {
+    margin: 28px 0;
+    padding: 20px;
+    background: #0f1116;
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    overflow-x: auto;
+  }
+  .compare .caption {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-bottom: 14px;
+  }
+  .compare table { font-size: 13px; min-width: 600px; }
+  .compare td { font-family: var(--mono); font-size: 12.5px; }
+  .compare td:first-child {
+    font-family: var(--sans);
+    font-weight: 600;
+    color: var(--ink);
+    width: auto;
+  }
+
+  .rule {
+    border: none;
+    border-top: 1px dashed var(--rule);
+    margin: 64px 0;
+    position: relative;
+    text-align: center;
+  }
+  .rule::after {
+    content: "§";
+    position: absolute;
+    top: -14px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg);
+    padding: 0 14px;
+    color: var(--ink-faint);
+    font-family: var(--serif);
+    font-size: 20px;
+  }
+
+  .callout {
+    background: linear-gradient(180deg, var(--bg-card) 0%, var(--bg-soft) 100%);
+    border: 1px solid var(--rule);
+    border-top: 3px solid var(--pen);
+    padding: 22px 24px;
+    margin: 32px 0;
+    border-radius: 3px;
+  }
+  .callout .label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--pen);
+    margin-bottom: 8px;
+  }
+  .callout p:last-child { margin-bottom: 0; }
+
+  .deck { margin: 40px 0; }
+  .deck-title {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--pen);
+    margin-bottom: 4px;
+  }
+  .deck-sub {
+    font-family: var(--serif);
+    font-style: italic;
+    color: var(--ink-dim);
+    margin: 0 0 24px;
+    font-size: 16px;
+  }
+  .card-flip {
+    background: var(--bg-card);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    margin: 12px 0;
+    cursor: pointer;
+    transition: border-color 0.15s;
+    overflow: hidden;
+  }
+  .card-flip:hover { border-color: var(--pen); }
+  .card-flip .q {
+    padding: 18px 22px;
+    font-family: var(--serif);
+    color: var(--ink);
+    font-size: 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+  }
+  .card-flip .q::after {
+    content: "flip";
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    flex-shrink: 0;
+  }
+  .card-flip .a {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.25s ease-out, padding 0.25s ease-out;
+    padding: 0 22px;
+    font-family: var(--serif);
+    color: var(--ink-dim);
+    font-size: 15px;
+    line-height: 1.5;
+    background: var(--bg-soft);
+  }
+  .card-flip.open { border-color: var(--pen); }
+  .card-flip.open .a {
+    max-height: 700px;
+    padding: 16px 22px 18px;
+    border-top: 1px solid var(--rule);
+  }
+  .card-flip.open .q::after { content: "close"; color: var(--pen); }
+  .card-flip .a code { font-size: 0.85em; }
+
+  .end {
+    margin-top: 100px;
+    padding-top: 40px;
+    border-top: 2px solid var(--ink);
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-faint);
+    letter-spacing: 0.05em;
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .end .sig { color: var(--exec); font-weight: 700; letter-spacing: 0.15em; }
+
+  ::selection { background: var(--pen); color: var(--bg); }
+
+  /* ============== Mobile responsive patch ============== */
+  @media (max-width: 720px) {
+    body { font-size: 16px; line-height: 1.6; }
+    .wrap { padding: 48px 18px 100px; }
+    h1 { font-size: 32px !important; line-height: 1.1; }
+    .dek { font-size: 17px; }
+    h2 { font-size: 22px; flex-wrap: wrap; gap: 8px; }
+    h2 .num { font-size: 11px; }
+    h2 + .sub { font-size: 15px; }
+    h3 { font-size: 16px; }
+    .card { padding: 18px 16px; margin: 18px 0; }
+    .card-head { gap: 8px; }
+    .card-head .type-name { font-size: 16px; word-break: break-all; }
+    .tags { margin-left: 0; flex-wrap: wrap; }
+    pre {
+      font-size: 12px;
+      padding: 12px 14px;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .legend, .legend-item { padding: 16px 14px; }
+    .twin { gap: 10px; }
+    .take { padding: 14px 14px; }
+    table { font-size: 13px; }
+    th, td { padding: 8px 10px; }
+    td:first-child { width: auto; }
+    .flow, .compare { padding: 16px 14px; }
+    .step { font-size: 12px; padding: 9px 12px; gap: 8px; }
+    .technique { padding: 16px 16px; }
+    .technique .name { font-size: 18px; }
+    .end { flex-direction: column; align-items: flex-start; }
+    .masthead { padding: 16px 0 14px; margin-bottom: 48px; }
+    .masthead .brand { font-size: 11px; }
+    .byline { margin-bottom: 56px; padding-bottom: 28px; font-size: 11px; }
+  }
+
+  /* Tablet adjustments */
+  @media (min-width: 721px) and (max-width: 920px) {
+    .wrap { padding: 64px 24px 120px; }
+    h1 { font-size: clamp(36px, 6vw, 50px); }
+  }
+</style>
+</head>
+<body data-nb-protected>
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="brand">blacksun<span>CUBE</span> &nbsp;·&nbsp; field notebook</div>
+    <div class="meta">vol. 07 / entry: process injection — part 1</div>
+  </header>
+
+  <h1>Process Injection,<br><em>or: composing six volumes' worth of primitives into seven techniques.</em></h1>
+  <p class="dek">A walk through the seven canonical injection methods that shaped 2017&ndash;2024 offensive Windows tradecraft &mdash; classic remote thread, hollowing, APC, doppelg&auml;nging, herpaderping, ghosting, early bird &mdash; with the kernel telemetry each one fires.</p>
+  <div class="byline">blacksun<span style="color:var(--exec);">CUBE</span> field notebook &middot; vol. 07 (part 1 of 2) &middot; <em>builds on vol. 02 (PE), 04 (loader), 05 (syscalls), 06 (hooking)</em></div>
+
+  <p>Six volumes prepared the ground. Now we compose. Every "process injection technique" you've ever heard of decomposes into a small set of primitive operations: open a remote process, allocate memory there, write data, change protections, redirect a thread. The differences between techniques are <em>which subset of primitives they use, in what order, and which detection chokepoint they target</em>.</p>
+
+  <p>This volume covers seven techniques. Part 2 (vol. 08) will cover the rest &mdash; thread hijacking variants, AtomBombing, transacted hollowing, callback abuse, and the 2024+ generation: Early Cascade Injection, EDR-Preloading, and module stomping. The split is by complexity, not importance: the seven here are the <em>foundational</em> techniques, the ones every other technique builds on.</p>
+
+  <p>For each, we cover four things:</p>
+
+  <ol style="font-family: var(--serif); color: var(--ink); padding-left: 24px;">
+    <li style="margin-bottom: 8px;"><strong>The mechanism</strong> &mdash; what API/syscall sequence makes it work.</li>
+    <li style="margin-bottom: 8px;"><strong>The structures touched</strong> &mdash; PEB fields written, image sections unmapped, transactions opened.</li>
+    <li style="margin-bottom: 8px;"><strong>The kernel telemetry</strong> &mdash; what fires in ETW-TI / kernel callbacks regardless of user-mode evasion.</li>
+    <li><strong>The detection chokepoint</strong> &mdash; the single signal that catches this in 2026, even if every other layer is bypassed.</li>
+  </ol>
+
+  <p>Same axes you know:</p>
+
+  <div class="legend">
+    <div class="legend-item r">
+      <span class="tag">R &middot; Read</span>
+      <h4>Reconnaissance</h4>
+      <p>Opening the target, querying its PEB, reading its image base, locating threads. The "looking around" phase before any modification.</p>
+    </div>
+    <div class="legend-item w">
+      <span class="tag">W &middot; Write</span>
+      <h4>Payload placement</h4>
+      <p>Allocating memory in the remote process, writing the payload, changing protections, modifying thread context. Where most telemetry fires.</p>
+    </div>
+    <div class="legend-item x">
+      <span class="tag">X &middot; Execute</span>
+      <h4>The trigger</h4>
+      <p>Resuming the suspended thread, queuing an APC, hijacking a thread. The single instant when foreign code starts running in the host.</p>
+    </div>
+  </div>
+
+  <hr class="rule">
+
+  <!-- ========== § 01 ========== -->
+  <h2><span class="num">§ 01</span> The shared primitive set</h2>
+  <p class="sub">Eight syscalls, composed differently. That's the whole taxonomy.</p>
+
+  <p>Before we walk the seven techniques, here are the primitives every one of them composes from. This list is exhaustive for the techniques in this volume:</p>
+
+  <table>
+    <tr><th>Primitive</th><th>Syscall (or pair)</th><th>What it does</th></tr>
+    <tr><td>Open target process</td><td><code>NtOpenProcess</code> / <code>NtCreateUserProcess</code></td><td>Get a handle with rights to read/write/inject. <code>OpenProcess</code> for existing targets, <code>CreateProcess</code> with <code>CREATE_SUSPENDED</code> for new ones.</td></tr>
+    <tr><td>Allocate remote memory</td><td><code>NtAllocateVirtualMemory</code></td><td>Reserve a region in the target's address space. Almost always with <code>PAGE_EXECUTE_READWRITE</code> initially.</td></tr>
+    <tr><td>Write payload</td><td><code>NtWriteVirtualMemory</code></td><td>Copy shellcode or a PE image into that region.</td></tr>
+    <tr><td>Change protection</td><td><code>NtProtectVirtualMemory</code></td><td>Optionally flip the region from RWX to RX after the write, to look less suspicious.</td></tr>
+    <tr><td>Unmap image</td><td><code>NtUnmapViewOfSection</code></td><td>Remove the original PE image from a suspended process. The signature primitive of process hollowing.</td></tr>
+    <tr><td>Read context</td><td><code>NtGetContextThread</code></td><td>Read a thread's registers (RIP, RSP, etc.). Pre-step for context-modification injection.</td></tr>
+    <tr><td>Redirect thread</td><td><code>NtSetContextThread</code></td><td>Overwrite RIP to make the thread start executing your payload on resume.</td></tr>
+    <tr><td>Queue APC</td><td><code>NtQueueApcThread(Ex)</code></td><td>Add an asynchronous procedure call to a thread's APC queue. Fires when the thread enters an alertable state (or when <code>NtTestAlert</code> empties the queue).</td></tr>
+    <tr><td>Resume / start thread</td><td><code>NtResumeThread</code> / <code>NtCreateThreadEx</code></td><td>Start execution. The trigger.</td></tr>
+  </table>
+
+  <p>Almost every detection rule for process injection in production EDR products keys on combinations of two or three of these calls happening cross-process within a short time window. The hard part for offensive code is not finding a "novel primitive" &mdash; it's <em>composing the existing primitives in a way that doesn't pattern-match a known sequence</em>.</p>
+
+  <hr class="rule">
+
+  <!-- ========== § 02 ========== -->
+  <h2><span class="num">§ 02</span> Classic Remote Thread</h2>
+  <p class="sub">The textbook injection. Old, loud, still works against unsupervised endpoints.</p>
+
+  <div class="technique t1">
+    <div class="head">
+      <div class="name">Classic Remote Thread Injection</div>
+      <div class="mitre">MITRE T1055.002 / T1055.003</div>
+      <div class="year">~2002</div>
+    </div>
+    <p class="summary">Open a target, allocate memory, write payload, create a thread that starts at the payload. Five API calls, no tricks.</p>
+  </div>
+
+  <div class="flow">
+    <div class="caption">canonical flow &middot; classic remote thread injection</div>
+    <div class="step r">
+      <div class="n">1</div>
+      <div class="api">OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid)</div>
+      <div class="role">obtain handle to target</div>
+    </div>
+    <div class="step w">
+      <div class="n">2</div>
+      <div class="api">VirtualAllocEx(hProc, NULL, size, MEM_COMMIT, PAGE_EXECUTE_READWRITE)</div>
+      <div class="role">allocate RWX in target</div>
+    </div>
+    <div class="step w">
+      <div class="n">3</div>
+      <div class="api">WriteProcessMemory(hProc, addr, payload, size, NULL)</div>
+      <div class="role">copy shellcode in</div>
+    </div>
+    <div class="step x">
+      <div class="n">4</div>
+      <div class="api">CreateRemoteThread(hProc, NULL, 0, addr, NULL, 0, NULL)</div>
+      <div class="role">spawn thread at payload</div>
+    </div>
+    <div class="step t">
+      <div class="n">5</div>
+      <div class="api">CloseHandle(hProc)</div>
+      <div class="role">cleanup</div>
+    </div>
+  </div>
+
+  <div class="telemetry">
+    <strong>What fires:</strong> step 1 produces a process-handle event with <code>GrantedAccess</code> mask <code>0x1FFFFF</code> &mdash; full access to a process the caller has no business touching. Sysmon Event 10 logs this; Defender for Endpoint surfaces it. Step 2 fires ETW-TI <code>ALLOCVM_REMOTE</code>. Step 3 fires <code>WRITEVM_REMOTE</code>. Step 4 fires the <code>PsSetCreateThreadNotifyRoutine</code> kernel callback with the source PID, target PID, and start address &mdash; if the start address points to private RWX memory in the target, that's a near-certain IOC. <strong>Detection in 2026: trivial across all major EDRs.</strong>
+  </div>
+
+  <p>This technique is no longer viable against any modern EDR &mdash; it's the canonical baseline that every detection rule starts from. We document it here because all subsequent techniques reduce to "do the same thing, but try to evade one of these five telemetry events."</p>
+
+  <hr class="rule">
+
+  <!-- ========== § 03 ========== -->
+  <h2><span class="num">§ 03</span> Process Hollowing (RunPE)</h2>
+  <p class="sub">Create a legitimate-looking process, scoop out its insides, fill with malware. The 2010s flagship.</p>
+
+  <div class="technique t2">
+    <div class="head">
+      <div class="name">Process Hollowing / RunPE</div>
+      <div class="mitre">MITRE T1055.012</div>
+      <div class="year">~2011</div>
+    </div>
+    <p class="summary">Spawn a benign-looking process (svchost.exe, explorer.exe, notepad.exe) suspended, unmap its image, copy in a malicious PE, fix up its entry point, resume.</p>
+  </div>
+
+  <div class="flow">
+    <div class="caption">canonical flow &middot; process hollowing</div>
+    <div class="step r">
+      <div class="n">1</div>
+      <div class="api">CreateProcess("svchost.exe", CREATE_SUSPENDED, ...)</div>
+      <div class="role">spawn suspended target</div>
+    </div>
+    <div class="step r">
+      <div class="n">2</div>
+      <div class="api">NtQueryInformationProcess(ProcessBasicInformation) → PEB</div>
+      <div class="role">find PEB.ImageBaseAddress</div>
+    </div>
+    <div class="step p">
+      <div class="n">3</div>
+      <div class="api">NtUnmapViewOfSection(hProc, ImageBase)</div>
+      <div class="role">scoop out the original PE</div>
+    </div>
+    <div class="step w">
+      <div class="n">4</div>
+      <div class="api">VirtualAllocEx(hProc, ImageBase, SizeOfImage, MEM_COMMIT, PAGE_EXECUTE_READWRITE)</div>
+      <div class="role">re-allocate at same base</div>
+    </div>
+    <div class="step w">
+      <div class="n">5</div>
+      <div class="api">WriteProcessMemory: PE headers + each section</div>
+      <div class="role">copy malicious PE in</div>
+    </div>
+    <div class="step w">
+      <div class="n">6</div>
+      <div class="api">SetThreadContext: ctx.Rip = malicious_entry_point</div>
+      <div class="role">redirect main thread to payload</div>
+    </div>
+    <div class="step x">
+      <div class="n">7</div>
+      <div class="api">ResumeThread(hThread)</div>
+      <div class="role">execution begins inside fake svchost</div>
+    </div>
+  </div>
+
+  <p>The defining primitive is step 3: <code>NtUnmapViewOfSection</code> on a remote process's <em>primary image section</em>. Microsoft's own MITRE technique entry calls this out as the most distinctive indicator: <em>"The call to ZwUnmapViewOfSection or NtUnmapViewOfSection on a remote process is the most distinctive indicator of process hollowing. This API call is rarely used in legitimate software."</em></p>
+
+  <div class="margin">
+    Some implementations skip the unmap entirely and just overwrite the original image bytes (vol. 02's PE sections happen to align such that you can write a smaller PE into the same address space). This is what VBA-RunPE does, which is exactly why Cortex XDR added explicit signatures for it &mdash; the unmap was the simple detection signal, and dropping it forces defenders to look at the in-memory image vs. on-disk image hash mismatch instead.
+  </div>
+
+  <div class="telemetry">
+    <strong>Detection in 2026:</strong> two signatures in parallel. (1) Cross-process <code>NtUnmapViewOfSection</code> on the primary image section &mdash; high-fidelity, low false-positive. Sysmon's <em>Event ID 25</em> (introduced in Sysmon 13.00, January 2021) fires explicitly when "the mapped image of a process doesn't match the on-disk image file" (Microsoft's wording). (2) PEB.ImageBaseAddress mapped region whose hash doesn't match the executable on disk. Volatility's <code>hollowfind</code> plugin and <code>malfind</code> have caught hollowing for over a decade.
+  </div>
+
+  <hr class="rule">
+
+  <!-- ========== § 04 ========== -->
+  <h2><span class="num">§ 04</span> APC Injection &amp; Early Bird</h2>
+  <p class="sub">Use the asynchronous procedure call mechanism to make a thread execute your code "incidentally."</p>
+
+  <div class="technique t3">
+    <div class="head">
+      <div class="name">APC Injection (and Early Bird variant)</div>
+      <div class="mitre">MITRE T1055.004</div>
+      <div class="year">2018 (Early Bird), ~2005 (basic APC)</div>
+    </div>
+    <p class="summary">Queue an APC to a remote thread; when the thread enters an alertable state (or when <code>NtTestAlert</code> empties the queue at thread start), the APC fires and runs your code.</p>
+  </div>
+
+  <p>The mechanic is structurally different from the previous techniques: you don't create a new thread. You hijack an existing one's APC queue. Every Windows thread has a dispatcher mechanism that drains pending APCs at well-defined points &mdash; on entry, on exit from blocking syscalls, on <code>WaitForSingleObjectEx</code> with <code>bAlertable=TRUE</code>, or via <code>NtTestAlert</code>.</p>
+
+  <p>Cyberbit's 2018 disclosure of <strong>Early Bird</strong> made this technique famous: the canonical chain at thread startup is <code>LdrInitializeThunk → LdrpInitialize → _LdrpInitialize → NtTestAlert → KiUserApcDispatcher</code>, and the APC fires <em>before</em> the application's <code>main</code> &mdash; before, in many cases, the EDR's hooks have been installed.</p>
+
+  <div class="flow">
+    <div class="caption">canonical flow &middot; Early Bird APC injection</div>
+    <div class="step r">
+      <div class="n">1</div>
+      <div class="api">CreateProcess("svchost.exe", CREATE_SUSPENDED, ...)</div>
+      <div class="role">spawn suspended target</div>
+    </div>
+    <div class="step w">
+      <div class="n">2</div>
+      <div class="api">VirtualAllocEx(hProc, NULL, size, ..., PAGE_EXECUTE_READWRITE)</div>
+      <div class="role">RWX in target</div>
+    </div>
+    <div class="step w">
+      <div class="n">3</div>
+      <div class="api">WriteProcessMemory(hProc, addr, shellcode, size, NULL)</div>
+      <div class="role">copy shellcode</div>
+    </div>
+    <div class="step p">
+      <div class="n">4</div>
+      <div class="api">QueueUserAPC((PAPCFUNC)addr, hThread, 0)</div>
+      <div class="role">queue APC pointing at shellcode</div>
+    </div>
+    <div class="step x">
+      <div class="n">5</div>
+      <div class="api">ResumeThread(hThread)</div>
+      <div class="role">NtTestAlert fires APC before main()</div>
+    </div>
+  </div>
+
+  <div class="margin">
+    Outflank's October 2024 research re-evaluated Early Bird against modern EDRs: the technique still bypasses <em>some</em> EDRs whose hook installation happens after <code>NtTestAlert</code>. But the cross-process APC queueing is itself a high-fidelity IOC (<code>NtQueueApcThread</code> from one process to a freshly-spawned suspended child is unusual). Outflank concluded Early Bird "remains a valuable injection technique, even though it is less effective as an evasion method against modern EDRs." Pair this with what we covered in vol. 04 (loader) and vol. 06 (DLL injection): the same race window that makes Early Bird possible is being closed by EDRs that install their hooks from kernel mode rather than via user-mode APC.
+  </div>
+
+  <div class="telemetry">
+    <strong>Detection in 2026:</strong> <code>NtQueueApcThread</code> with source PID different from target PID, where the target is in <code>SUSPENDED</code> state and was created by the source within seconds. Pair with the APC routine pointing into RWX private memory. Defender for Endpoint, Elastic Defend, and CrowdStrike Falcon all have rules for this pattern. Special User APCs (<code>NtQueueApcThreadEx</code> with the special bit, RS5+) bypass the alertable-state requirement but produce the same telemetry.
+  </div>
+
+  <hr class="rule">
+
+  <!-- ========== § 05 ========== -->
+  <h2><span class="num">§ 05</span> Process Doppelg&auml;nging</h2>
+  <p class="sub">Abuse NTFS transactions to execute a malicious image whose disk file never visibly contains malware.</p>
+
+  <div class="technique t4">
+    <div class="head">
+      <div class="name">Process Doppelg&auml;nging</div>
+      <div class="mitre">MITRE T1055.013</div>
+      <div class="year">2017 (Liberman &amp; Kogan, BlackHat EU)</div>
+    </div>
+    <p class="summary">Open an NTFS transaction, write malicious bytes to a legitimate file inside the transaction, map the transacted file as an image section, roll back the transaction, then create a process from the section. The disk never contains the malware.</p>
+  </div>
+
+  <p>This is the first technique in the volume that exploits an undocumented OS feature for evasion rather than just composing primitives differently. <strong>Transactional NTFS (TxF)</strong> was introduced in Vista to allow atomic file operations &mdash; a sequence of writes that either fully commit or fully roll back. Microsoft has since deprecated TxF for new applications, but the kernel still supports it. The catch: <em>image sections created from transacted files retain their backing data after rollback</em>.</p>
+
+  <div class="flow">
+    <div class="caption">canonical flow &middot; process doppelg&auml;nging</div>
+    <div class="step r">
+      <div class="n">1</div>
+      <div class="api">NtCreateTransaction → hTransaction</div>
+      <div class="role">open NTFS transaction</div>
+    </div>
+    <div class="step w">
+      <div class="n">2</div>
+      <div class="api">CreateFileTransacted("legit.exe", hTransaction)</div>
+      <div class="role">open file inside the transaction</div>
+    </div>
+    <div class="step w">
+      <div class="n">3</div>
+      <div class="api">WriteFile(hFile, malicious_pe_bytes, ...)</div>
+      <div class="role">overwrite with malware (in-transaction only)</div>
+    </div>
+    <div class="step w">
+      <div class="n">4</div>
+      <div class="api">NtCreateSection(SEC_IMAGE, hFile)</div>
+      <div class="role">map malicious bytes as an image section</div>
+    </div>
+    <div class="step p">
+      <div class="n">5</div>
+      <div class="api">NtRollbackTransaction(hTransaction)</div>
+      <div class="role">file on disk reverts to original benign content</div>
+    </div>
+    <div class="step x">
+      <div class="n">6</div>
+      <div class="api">NtCreateProcessEx(hSection, ...) + NtCreateThreadEx</div>
+      <div class="role">create process from the malicious section</div>
+    </div>
+  </div>
+
+  <div class="callout">
+    <div class="label">why this defeated AVs in 2017</div>
+    <p>Antivirus engines scanned files at write time and at process creation. Doppelg&auml;nging ensured (a) the file write happens inside a transaction the AV doesn't inspect, (b) the file content visible at process creation is the rolled-back benign version, and (c) the kernel happily creates a process from an image section whose backing file no longer matches what's mapped. From the security product's perspective, the process appears to be running <code>legit.exe</code>; the in-memory image is something else entirely.</p>
+  </div>
+
+  <p>The 2017 disclosure used <code>NtCreateProcessEx</code> &mdash; an undocumented older syscall that creates a process from a section <em>without</em> firing the standard process creation callbacks at the same point as <code>NtCreateUserProcess</code>. This is the seam that Microsoft eventually closed.</p>
+
+  <div class="telemetry">
+    <strong>Detection in 2026:</strong> Microsoft Defender for Endpoint added explicit detection for the doppelg&auml;nging class in 2022, focusing on the <code>FILE_OBJECT</code> abnormalities visible at process creation time. The <code>MpCreateProcessNotifyRoutineEx</code> callback (in <code>WdFilter.sys</code>) inspects the FileObject's transaction state. <strong>Doppelg&auml;nging is reliably caught by Defender, Elastic Defend, and CrowdStrike in 2026.</strong> Cyberwarfare Labs verified that Windows Defender returns <code>0xC0000022 (ACCESS_DENIED)</code> when the doppelganging chain attempts thread creation. The technique is a known dead-end against mainstream EDRs.
+  </div>
+
+  <hr class="rule">
+
+  <!-- ========== § 06 ========== -->
+  <h2><span class="num">§ 06</span> Process Herpaderping</h2>
+  <p class="sub">Same problem as doppelg&auml;nging, solved without transactions: modify the file on disk after the image section is mapped.</p>
+
+  <div class="technique t5">
+    <div class="head">
+      <div class="name">Process Herpaderping</div>
+      <div class="mitre">MITRE T1055 variant</div>
+      <div class="year">2020 (Johnny Shaw, jxy-s)</div>
+    </div>
+    <p class="summary">Write the payload PE to disk, map it as a section, then overwrite the file on disk with a decoy <em>before</em> the kernel's process-creation callback fires. The callback inspects the disk file (now decoy), not the mapped section (still malicious).</p>
+  </div>
+
+  <p>Herpaderping exploits a specific timing fact established in Elastic's research and Microsoft's own blog: <em><code>PsSetCreateProcessNotifyRoutineEx</code> callbacks are not invoked at process creation &mdash; they're invoked when the first thread is inserted</em>. That gap, between section mapping and first-thread-insertion, is the herpaderping window.</p>
+
+  <div class="flow">
+    <div class="caption">canonical flow &middot; process herpaderping</div>
+    <div class="step w">
+      <div class="n">1</div>
+      <div class="api">CreateFile("target.exe", FILE_SHARE_READ | WRITE) + WriteFile(payload)</div>
+      <div class="role">payload written to disk</div>
+    </div>
+    <div class="step w">
+      <div class="n">2</div>
+      <div class="api">NtCreateSection(SEC_IMAGE, hFile)</div>
+      <div class="role">map payload as image section</div>
+    </div>
+    <div class="step w">
+      <div class="n">3</div>
+      <div class="api">NtCreateProcessEx(hSection, ...)</div>
+      <div class="role">process object created (no callback yet!)</div>
+    </div>
+    <div class="step p">
+      <div class="n">4</div>
+      <div class="api">SetFilePointer(hFile, 0) + WriteFile(decoy_pe_bytes)</div>
+      <div class="role">overwrite disk with benign decoy</div>
+    </div>
+    <div class="step x">
+      <div class="n">5</div>
+      <div class="api">NtCreateThreadEx(hProc, ...)</div>
+      <div class="role">first thread inserted → callback fires → AV scans disk → sees decoy</div>
+    </div>
+  </div>
+
+  <p>The structural difference from doppelg&auml;nging: <em>no NTFS transactions</em>. Just an open file handle, a section, and a write. The defender's process-creation scan sees the decoy, not the payload. The mapped section in memory still contains the payload &mdash; and that's what the new process executes.</p>
+
+  <div class="telemetry">
+    <strong>Detection in 2026:</strong> mixed. Microsoft Defender added detection in their 2022 blog post specifically for this class; Sysmon's <em>Event ID 25</em> (image tampering) catches the on-disk vs. in-memory mismatch. However, jxy-s's own GitHub README (which remains the authoritative source) noted that <em>"Defender doesn't catch Herpaderping"</em> as of disclosure &mdash; that statement is now outdated for Defender for Endpoint, but <strong>some commercial AVs still miss this technique</strong> because they trust the disk image at thread-insert time. Elastic Defend's <code>process.Ext.defense_evasions</code> category is the clean reference detection.
+  </div>
+
+  <hr class="rule">
+
+  <!-- ========== § 07 ========== -->
+  <h2><span class="num">§ 07</span> Process Ghosting</h2>
+  <p class="sub">Take herpaderping further: <em>delete</em> the file before the callback fires. Section in memory is now backed by a non-existent file.</p>
+
+  <div class="technique t1">
+    <div class="head">
+      <div class="name">Process Ghosting</div>
+      <div class="mitre">MITRE T1055 variant</div>
+      <div class="year">2021 (Gabriel Landau, Elastic)</div>
+    </div>
+    <p class="summary">Mark a file delete-pending, write payload, map as section, close the handle (file is now deleted), create a process from the section. The process backing-file no longer exists when the callback runs.</p>
+  </div>
+
+  <p>The crucial OS quirk: <em>Windows prevents modification or deletion of mapped executable files <strong>only after the binary is mapped into an image section</strong></em>. So the trick is to set up deletion <em>before</em> mapping, do the mapping, and let the deletion complete after.</p>
+
+  <div class="flow">
+    <div class="caption">canonical flow &middot; process ghosting</div>
+    <div class="step w">
+      <div class="n">1</div>
+      <div class="api">NtCreateFile(GENERIC_WRITE | DELETE)</div>
+      <div class="role">file with delete-on-close intent</div>
+    </div>
+    <div class="step p">
+      <div class="n">2</div>
+      <div class="api">NtSetInformationFile(FileDispositionInformation, DeleteFile=TRUE)</div>
+      <div class="role">mark for delete-pending</div>
+    </div>
+    <div class="step w">
+      <div class="n">3</div>
+      <div class="api">WriteFile(hFile, payload, ...)</div>
+      <div class="role">write malicious PE</div>
+    </div>
+    <div class="step w">
+      <div class="n">4</div>
+      <div class="api">NtCreateSection(SEC_IMAGE, hFile)</div>
+      <div class="role">map as image section</div>
+    </div>
+    <div class="step p">
+      <div class="n">5</div>
+      <div class="api">CloseHandle(hFile)</div>
+      <div class="role">file deletion completes — now fileless</div>
+    </div>
+    <div class="step x">
+      <div class="n">6</div>
+      <div class="api">NtCreateProcessEx(hSection) + NtCreateThreadEx</div>
+      <div class="role">process from a section whose backing file no longer exists</div>
+    </div>
+  </div>
+
+  <p>Landau's original PoC demonstrated Windows Defender (at the time) attempting to scan the file fail twice: once because the file was delete-pending, and again because the file no longer existed. The process executed unimpeded.</p>
+
+  <div class="margin">
+    Microsoft's response when Landau disclosed this in May 2021 was: "does not meet our bar for servicing" &mdash; the same response they gave to herpaderping's disclosure a year earlier. This is unusual for Microsoft, and it tells you something about the threat model: <em>Microsoft considers process tampering attacks to be the security product's problem to detect, not the kernel's problem to prevent</em>. The kernel happily continues to permit these techniques in 2026; only the in-product detection layer catches them.
+  </div>
+
+  <div class="telemetry">
+    <strong>Detection in 2026:</strong> Elastic Security shipped explicit ghosting detection in 2021. Defender for Endpoint added detection in their 2022 update (referenced in Microsoft's "Using process creation properties to catch evasion techniques" blog). The detection inspects the <code>FILE_OBJECT</code>'s state at process-creation callback time and flags abnormalities &mdash; specifically, files that are delete-pending or have already been deleted. <strong>Ghosting reliably catches detection in mature EDRs in 2026, but legacy AVs and lighter EDR products still miss it.</strong>
+  </div>
+
+  <hr class="rule">
+
+  <!-- ========== § 08 ========== -->
+  <h2><span class="num">§ 08</span> Detection &mdash; the cross-cutting view</h2>
+  <p class="sub">Every technique above defeats at least one detection layer. Here's the full lattice.</p>
+
+  <p>The seven techniques target different chokepoints. Walking through them in order shows the historical arms race: each new technique was designed to defeat one specific detection that caught the previous generation.</p>
+
+  <div class="compare">
+    <div class="caption">technique &times; detection chokepoint matrix</div>
+    <table>
+      <tr>
+        <th>Technique</th>
+        <th>Cross-process write</th>
+        <th>Image-on-disk hash</th>
+        <th>Image base mismatch</th>
+        <th>FileObject inspection</th>
+      </tr>
+      <tr><td>Classic Remote Thread</td><td>caught</td><td>n/a</td><td>n/a</td><td>n/a</td></tr>
+      <tr><td>Process Hollowing</td><td>caught</td><td>caught</td><td>caught</td><td>n/a</td></tr>
+      <tr><td>APC / Early Bird</td><td>caught</td><td>n/a</td><td>n/a</td><td>n/a</td></tr>
+      <tr><td>Doppelg&auml;nging</td><td>n/a</td><td>evades</td><td>evades</td><td>caught</td></tr>
+      <tr><td>Herpaderping</td><td>n/a</td><td>evades</td><td>evades</td><td>caught (D4E)</td></tr>
+      <tr><td>Ghosting</td><td>n/a</td><td>evades</td><td>evades</td><td>caught (D4E)</td></tr>
+    </table>
+  </div>
+
+  <h3>The five detection chokepoints in 2026</h3>
+
+  <div class="twin">
+    <div class="take blue">
+      <h5>1 &middot; ETW-TI cross-process events</h5>
+      <p><code>ALLOCVM_REMOTE</code>, <code>WRITEVM_REMOTE</code>, <code>PROTECTVM_REMOTE</code>. Fire on every cross-process memory operation regardless of how invoked. Catches classic, hollowing, APC patterns.</p>
+    </div>
+    <div class="take blue">
+      <h5>2 &middot; Sysmon Event ID 25 (image tampering)</h5>
+      <p>Fires when "the mapped image of a process doesn't match the on-disk image file, or the image file is locked for exclusive access." Sysmon 13.00+. Catches hollowing, herpaderping, ghosting.</p>
+    </div>
+    <div class="take blue">
+      <h5>3 &middot; FileObject abnormality at PsCreateProcessNotify</h5>
+      <p>Defender for Endpoint &amp; Elastic Defend (2021+) inspect the FileObject when the create-process callback fires. Detect transacted files, delete-pending files, and files with active write handles. Catches doppelg&auml;nging, herpaderping, ghosting.</p>
+    </div>
+    <div class="take blue">
+      <h5>4 &middot; Cross-process APC queueing</h5>
+      <p><code>NtQueueApcThread(Ex)</code> with source PID &ne; target PID. High-fidelity by itself; near-perfect when paired with target-was-suspended-by-source. Catches APC / Early Bird.</p>
+    </div>
+    <div class="take blue">
+      <h5>5 &middot; In-memory PE hash diff vs. on-disk</h5>
+      <p>Volatility's <code>hollowfind</code>, <code>malfind</code>, <code>impscan</code>; Defender's behavioral analysis. Catches anything that swaps PE content after process creation. Particularly powerful for forensics; less commonly real-time.</p>
+    </div>
+  </div>
+
+  <hr class="rule">
+
+  <!-- ========== § 09 ========== -->
+  <div class="deck">
+    <div class="deck-title">§ 09 &nbsp;·&nbsp; the 30-second recall</div>
+    <h2 style="margin-top: 6px;">Flashcards</h2>
+    <p class="deck-sub">Eight questions. If you can answer all without notes, you have the foundational injection taxonomy memorized.</p>
+
+    <div class="card-flip" onclick="this.classList.toggle('open')">
+      <div class="q">Name the canonical 5-call sequence for classic remote thread injection.</div>
+      <div class="a"><code>OpenProcess(PROCESS_ALL_ACCESS)</code> → <code>VirtualAllocEx(RWX)</code> → <code>WriteProcessMemory</code> → <code>CreateRemoteThread</code> → <code>CloseHandle</code>. Each step fires a distinct telemetry event: handle-open with <code>0x1FFFFF</code> mask, <code>ALLOCVM_REMOTE</code>, <code>WRITEVM_REMOTE</code>, kernel thread-create callback. This is the baseline against which every other technique is measured for "what did it evade?"</div>
+    </div>
+
+    <div class="card-flip" onclick="this.classList.toggle('open')">
+      <div class="q">What is the most distinctive single API call that indicates process hollowing, and why?</div>
+      <div class="a"><code>NtUnmapViewOfSection</code> (or <code>ZwUnmapViewOfSection</code>) called <em>cross-process</em>, on a remote process's primary image section. MITRE explicitly notes this is "rarely used in legitimate software." The unmap is what turns a legitimate svchost.exe process into a hollow shell ready to receive malware. Hollowing variants that <em>skip</em> the unmap (like VBA-RunPE) defeat this specific detection but still get caught by image-hash-vs-disk mismatches.</div>
+    </div>
+
+    <div class="card-flip" onclick="this.classList.toggle('open')">
+      <div class="q">Why does Early Bird APC injection trigger before <code>main</code>, and what's the call chain?</div>
+      <div class="a">When a thread starts, <code>LdrInitializeThunk → LdrpInitialize → _LdrpInitialize → NtTestAlert</code> runs as part of thread setup. <code>NtTestAlert</code> empties the APC queue, calling <code>KiUserApcDispatcher</code> for each pending APC. This happens before the application's <code>main</code> entry point. If you've queued an APC pointing to your shellcode and the thread was suspended, resuming it makes <code>NtTestAlert</code> fire your APC immediately, before any application or EDR-injected hook code runs.</div>
+    </div>
+
+    <div class="card-flip" onclick="this.classList.toggle('open')">
+      <div class="q">Process Doppelg&auml;nging uses Transactional NTFS. What's the four-word summary of the core trick?</div>
+      <div class="a">"Transact, write, map, rollback." The malicious PE bytes are written to a legitimate file <em>inside</em> an NTFS transaction. An image section is created from the transacted file (containing malicious bytes). The transaction is rolled back &mdash; the file on disk reverts to benign. But the kernel-cached image section still contains the malicious bytes, and a process can be created from it. AV scanning the file sees benign content; the running process executes malicious code.</div>
+    </div>
+
+    <div class="card-flip" onclick="this.classList.toggle('open')">
+      <div class="q">Why does Process Herpaderping work without using NTFS transactions?</div>
+      <div class="a">Because <code>PsSetCreateProcessNotifyRoutineEx</code> callbacks fire on first-thread-insertion, not on process object creation. The window between <code>NtCreateProcessEx</code> (which creates the process object from an image section) and <code>NtCreateThreadEx</code> (which inserts the first thread) is large enough to overwrite the on-disk file with a benign decoy. When the callback fires and the AV scans the disk, it sees the decoy. The mapped section in memory still has the original payload. Same effect as Doppelg&auml;nging without TxF.</div>
+    </div>
+
+    <div class="card-flip" onclick="this.classList.toggle('open')">
+      <div class="q">What's the OS-level fact that Process Ghosting exploits?</div>
+      <div class="a">Windows prevents modification or deletion of executable files <em>only after</em> they're mapped into an image section. So the technique: open a file with <code>DELETE</code> access, mark it delete-pending via <code>NtSetInformationFile(FileDispositionInformation, DeleteFile=TRUE)</code>, write the payload, map it as a section, close the handle (deletion completes &mdash; the file is gone), then create a process from the section. The process now has a backing file that doesn't exist, so AV scans of the file path return "file not found."</div>
+    </div>
+
+    <div class="card-flip" onclick="this.classList.toggle('open')">
+      <div class="q">Sysmon Event ID 25 fires for which class of techniques?</div>
+      <div class="a">Image tampering. Specifically, when "the mapped image of a process doesn't match the on-disk image file, or the image file is locked for exclusive access." Introduced in Sysmon 13.00 (January 2021) as a direct response to herpaderping's public disclosure. Catches: process hollowing (in-memory PE differs from disk), herpaderping (decoy on disk, payload in memory), ghosting (backing file deleted), and most other PE tampering. Does not catch: APC injection (no PE tampering involved), classic remote thread (writes to private memory, not the image).</div>
+    </div>
+
+    <div class="card-flip" onclick="this.classList.toggle('open')">
+      <div class="q">Why does Microsoft consider process tampering "not meeting their bar for servicing", and what does this mean for defenders?</div>
+      <div class="a">Microsoft's stated position (from herpaderping and ghosting disclosures, 2020 and 2021) is that the kernel's job is to faithfully implement transactions, file deletion, and process creation as designed; preventing abuse of those primitives is the security product's responsibility. This is a deliberate boundary. For defenders it means: the kernel will not be patched to refuse these operations; detection must come from the EDR layer (FileObject inspection, ETW-TI, behavioral analysis). Sysmon Event 25 was Microsoft's compromise &mdash; surface the signal, let products decide what to do.</div>
+    </div>
+  </div>
+
+  <hr class="rule">
+
+  <!-- ========== § 10 ========== -->
+  <h2><span class="num">§ 10</span> Closing thought</h2>
+  <p>Seven volumes in. Here's the picture so far:</p>
+  <ul style="font-family: var(--serif); color: var(--ink); padding-left: 24px;">
+    <li style="margin-bottom: 8px;"><strong>Vol. 01</strong> &mdash; the alphabet (data types).</li>
+    <li style="margin-bottom: 8px;"><strong>Vol. 02</strong> &mdash; the static skeleton (PE format).</li>
+    <li style="margin-bottom: 8px;"><strong>Vol. 03</strong> &mdash; the living state (PEB / TEB / LDR).</li>
+    <li style="margin-bottom: 8px;"><strong>Vol. 04</strong> &mdash; the machinery that builds that state (the loader).</li>
+    <li style="margin-bottom: 8px;"><strong>Vol. 05</strong> &mdash; the border crossing (syscalls).</li>
+    <li style="margin-bottom: 8px;"><strong>Vol. 06</strong> &mdash; how the EDR rewrites bytes near that border.</li>
+    <li><strong>Vol. 07</strong> &mdash; how attackers compose all of the above into seven foundational injection techniques.</li>
+  </ul>
+
+  <p style="margin-top: 24px;">The dominant pattern across all seven techniques: <em>each one targets one specific detection chokepoint, and detection layers built on top of newer techniques rapidly close the gap</em>. Hollowing was world-class in 2014, baseline in 2026. Doppelg&auml;nging was state-of-the-art in 2017, reliably caught in 2026. Herpaderping and ghosting got ~3 years before mainstream EDRs caught up. The half-life of an injection technique against mature commercial EDRs is roughly the time between its public disclosure and the next major Sysmon / Defender / Elastic Defend release.</p>
+
+  <p>That's both the bad news for offense (everything in this volume is now telemetry-rich) and the good news for defense (modern stacks reliably catch the foundational techniques). The arms race has moved to part 2: thread hijacking variants, callback abuse, and the 2024 generation that targets the process-creation race window itself.</p>
+
+  <p>Next: <em class="pen">Vol. 08 &mdash; Process Injection Taxonomy (Part 2)</em>. Thread context hijacking (T1055.003), AtomBombing (T1055.014), transacted hollowing, callback function hooks (PROPagate, ALPC, GUI subclasses), module stomping, EDR-Preloading (Schvartzman / MalwareTech 2024), and Outflank's Early Cascade Injection (October 2024) which targets the very LdrLoadDll dependency-load loop we walked in vol. 04. Same framing throughout: structures touched, syscalls fired, detection chokepoints.</p>
+
+  <footer class="end">
+    <div>filed under &middot; windows internals &middot; process injection &middot; offensive &amp; detection</div>
+    <div class="sig">&mdash; blacksunCUBE</div>
+  </footer>
+
+</div>
+<script src="/assets/js/notebook-guard.js" defer></script>
+</body>
+</html>
