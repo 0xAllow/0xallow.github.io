@@ -1015,7 +1015,7 @@ ret</pre>
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
       <div class="q">Why is hardcoding SSN values in your tooling fragile, and what's the standard way to resolve them dynamically?</div>
-      <div class="a">SSNs are reordered between Windows builds  <code>NtAllocateVirtualMemory</code> on Windows 10 1903 is not the same number as on Windows 11 23H2. j00ru maintains the canonical online tracking table. Hell's Gate solves this by walking <code>PEB.Ldr</code> to find <code>ntdll</code>, parsing its export directory to locate the function, and reading the 4-byte SSN directly from the stub at offset +4. No version detection needed, no embedded table.</div>
+      <div class="a">SSNs are reordered between Windows builds  <code>NtAllocateVirtualMemory</code> on Windows 10 1903 is not the same number as on Windows 11 24H2. j00ru maintains the canonical online tracking table. Hell's Gate solves this by walking <code>PEB.Ldr</code> to find <code>ntdll</code>, parsing its export directory to locate the function, and reading the 4-byte SSN directly from the stub at offset +4. No version detection needed, no embedded table.</div>
     </div>
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
