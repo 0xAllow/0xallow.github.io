@@ -1066,7 +1066,7 @@ description: "How EDRs install their visibility into your process, and the five 
 
   <div class="callout">
     <div class="label">honest assessment for 2026</div>
-    <p>Against legacy AV and EDRs that rely primarily on user-mode hooks, all five unhook families work. Against Defender for Endpoint, CrowdStrike Falcon, SentinelOne, Elastic Defend  products that deemphasize user-mode hooks in favor of kernel callbacks, ETW-TI, and call-stack analysis  <em>unhooking does almost nothing on its own</em>. The hwbp/NTDLL-Unhook README puts it bluntly: "Advanced EDRs like Microsoft Defender for Endpoint and Elastic don't even use usermode hooks anymore since they rely on kernel callbacks and ETW telemetry, so unhooking does literally nothing against them." This is true. Modern offensive operations against mature EDRs combine unhooking with call-stack spoofing (vol. 05) and careful telemetry awareness.</p>
+    <p>Against legacy AV and EDRs that rely primarily on user-mode hooks, all five unhook families work. Against Defender for Endpoint, CrowdStrike Falcon, SentinelOne, Elastic Defend  products that deemphasize user-mode hooks in favor of kernel callbacks, ETW-TI, and call-stack analysis  <em>unhooking does almost nothing on its own</em>. The hwbp/NTDLL-Unhook README summarizes: "Advanced EDRs like Microsoft Defender for Endpoint and Elastic don't even use usermode hooks anymore since they rely on kernel callbacks and ETW telemetry, so unhooking does literally nothing against them." This is true. Modern offensive operations against mature EDRs combine unhooking with call-stack spoofing (vol. 05) and careful telemetry awareness.</p>
   </div>
 
   <hr class="rule">
