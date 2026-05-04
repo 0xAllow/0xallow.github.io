@@ -1,0 +1,1352 @@
+---
+layout: null
+title: "PPL & BYOVD"
+volume: "12"
+entry: "01"
+order: 1201
+date: 2026-04-30
+description: "The Protected Process Light architecture, the EPROCESS.Protection byte that gates everything, the Bring-Your-Own-Vulnerable-Driver attack surface in 2026, the Vulnerable Driver Blocklist's expanding role, and Microsoft's April 2026 kill of cross-signed driver trust — closing ARC III."
+---
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PPL &amp; BYOVD — a field notebook</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #14161a;
+    --bg-soft: #1b1e24;
+    --bg-card: #1f232a;
+    --ink: #e8e4d8;
+    --ink-dim: #a8a396;
+    --ink-faint: #6d6a5f;
+    --rule: #2b2f38;
+
+    --read:  #5ec2e0;
+    --read-bg: rgba(94,194,224,0.10);
+    --read-border: rgba(94,194,224,0.38);
+
+    --write: #e8b64a;
+    --write-bg: rgba(232,182,74,0.10);
+    --write-border: rgba(232,182,74,0.42);
+
+    --exec:  #e8624a;
+    --exec-bg: rgba(232,98,74,0.10);
+    --exec-border: rgba(232,98,74,0.42);
+
+    --pen:   #d9456b;
+    --pen-bg: rgba(217,69,107,0.10);
+
+    --tele:  #a590d9;
+    --tele-bg: rgba(165,144,217,0.10);
+    --tele-border: rgba(165,144,217,0.40);
+
+    --mono: 'JetBrains Mono', ui-monospace, monospace;
+    --serif: 'Crimson Pro', 'Iowan Old Style', 'Palatino', serif;
+    --sans: 'Space Grotesk', system-ui, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--serif);
+    font-size: 18px;
+    line-height: 1.65;
+    background-image:
+      radial-gradient(circle at 20% 10%, rgba(94,194,224,0.04) 0%, transparent 40%),
+      radial-gradient(circle at 85% 80%, rgba(232,98,74,0.04) 0%, transparent 45%),
+      repeating-linear-gradient(0deg, transparent 0, transparent 2px, rgba(255,255,255,0.006) 2px, rgba(255,255,255,0.006) 3px);
+    min-height: 100vh;
+  }
+
+  body::before {
+    content: "";
+    position: fixed; inset: 0;
+    pointer-events: none;
+    opacity: 0.035;
+    z-index: 0;
+    background-image: url("data:image/svg+xml;utf8,<svg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  }
+
+  .wrap { max-width: 920px; margin: 0 auto; padding: 80px 32px 160px; position: relative; z-index: 1; }
+
+  .masthead {
+    border-top: 2px solid var(--ink);
+    border-bottom: 1px solid var(--rule);
+    padding: 22px 0 18px;
+    margin-bottom: 72px;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+  .masthead .brand {
+    font-family: var(--sans);
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    font-size: 12px;
+    color: var(--ink-dim);
+  }
+  .masthead .brand span { color: var(--exec); }
+  .masthead .meta {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-faint);
+    letter-spacing: 0.05em;
+  }
+
+  h1 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: clamp(42px, 6vw, 64px);
+    line-height: 1.05;
+    letter-spacing: -0.015em;
+    margin: 0 0 14px;
+    color: var(--ink);
+  }
+  h1 em { font-style: italic; color: var(--ink-dim); font-weight: 400; }
+
+  .dek {
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 21px;
+    color: var(--ink-dim);
+    max-width: 640px;
+    margin: 0 0 24px;
+    line-height: 1.45;
+  }
+  .byline {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-faint);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 80px;
+    padding-bottom: 40px;
+    border-bottom: 1px dashed var(--rule);
+  }
+  .byline em { color: var(--pen); font-style: normal; }
+
+  h2 {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 26px;
+    letter-spacing: -0.01em;
+    margin: 80px 0 6px;
+    color: var(--ink);
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+  }
+  h2 .num {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--ink-faint);
+    letter-spacing: 0.1em;
+  }
+  h2 + .sub {
+    font-family: var(--serif);
+    font-style: italic;
+    color: var(--ink-dim);
+    margin: 0 0 32px;
+    font-size: 17px;
+  }
+
+  h3 {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 17px;
+    letter-spacing: 0.01em;
+    margin: 36px 0 10px;
+    color: var(--ink);
+  }
+
+  p { margin: 0 0 18px; }
+
+  code, .kw {
+    font-family: var(--mono);
+    font-size: 0.86em;
+    background: var(--bg-soft);
+    padding: 2px 6px;
+    border-radius: 3px;
+    color: var(--ink);
+    border: 1px solid var(--rule);
+  }
+
+  strong { color: var(--ink); font-weight: 600; }
+  em.pen { color: var(--pen); font-style: italic; font-weight: 500; }
+
+  .legend {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0;
+    margin: 0 0 56px;
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    overflow: hidden;
+    background: var(--bg-card);
+  }
+  .legend-item { padding: 22px 20px; border-right: 1px solid var(--rule); }
+  .legend-item:last-child { border-right: none; }
+  .legend-item .tag {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 2px;
+  }
+  .legend-item.r .tag { background: var(--read-bg); color: var(--read); border: 1px solid var(--read-border); }
+  .legend-item.w .tag { background: var(--write-bg); color: var(--write); border: 1px solid var(--write-border); }
+  .legend-item.x .tag { background: var(--exec-bg); color: var(--exec); border: 1px solid var(--exec-border); }
+  .legend-item h4 {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 15px;
+    margin: 0 0 6px;
+    color: var(--ink);
+  }
+  .legend-item p {
+    font-family: var(--serif);
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--ink-dim);
+    margin: 0;
+  }
+  @media (max-width: 680px) {
+    .legend { grid-template-columns: 1fr; }
+    .legend-item { border-right: none; border-bottom: 1px solid var(--rule); }
+    .legend-item:last-child { border-bottom: none; }
+  }
+
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--rule);
+    border-radius: 3px;
+    padding: 24px 26px;
+    margin: 24px 0;
+  }
+  .card.read  { border-left-color: var(--read); }
+  .card.write { border-left-color: var(--write); }
+  .card.exec  { border-left-color: var(--exec); }
+
+  .card-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+  .card-head .type-name {
+    font-family: var(--mono);
+    font-weight: 700;
+    font-size: 17px;
+    color: var(--ink);
+  }
+  .tags { display: flex; gap: 6px; margin-left: auto; }
+  .pill {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    padding: 3px 8px;
+    border-radius: 2px;
+    text-transform: uppercase;
+  }
+  .pill.r { background: var(--read-bg); color: var(--read); border: 1px solid var(--read-border); }
+  .pill.w { background: var(--write-bg); color: var(--write); border: 1px solid var(--write-border); }
+  .pill.x { background: var(--exec-bg); color: var(--exec); border: 1px solid var(--exec-border); }
+
+  .gloss {
+    font-family: var(--serif);
+    font-style: italic;
+    color: var(--ink-dim);
+    font-size: 15px;
+    margin: 0 0 12px;
+  }
+
+  pre {
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.6;
+    background: #0f1116;
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    padding: 16px 18px;
+    overflow-x: auto;
+    margin: 14px 0;
+    color: #cdd1d8;
+  }
+  pre .c  { color: var(--ink-faint); font-style: italic; }
+  pre .k  { color: #b98dd0; }
+  pre .t  { color: #7dc9a9; }
+  pre .s  { color: #d8b36b; }
+  pre .n  { color: #e89069; }
+  pre .fn { color: #6db6d6; }
+  pre .m  { color: var(--pen); }
+  pre .fld { color: var(--write); }
+  pre .off { color: var(--tele); }
+
+  .hl-r { background: var(--read-bg); color: var(--read); padding: 1px 4px; border-radius: 2px; }
+  .hl-w { background: var(--write-bg); color: var(--write); padding: 1px 4px; border-radius: 2px; }
+  .hl-x { background: var(--exec-bg); color: var(--exec); padding: 1px 4px; border-radius: 2px; }
+
+  .margin {
+    border-left: 2px solid var(--pen);
+    background: var(--pen-bg);
+    padding: 14px 16px 14px 18px;
+    margin: 20px 0;
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 15px;
+    color: var(--ink);
+    line-height: 1.55;
+    position: relative;
+  }
+  .margin::before {
+    content: "margin note";
+    position: absolute;
+    top: -9px;
+    left: 14px;
+    background: var(--bg);
+    padding: 0 8px;
+    font-family: var(--mono);
+    font-size: 10px;
+    font-style: normal;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--pen);
+  }
+
+  .telemetry {
+    border: 1px solid var(--tele-border);
+    background: var(--tele-bg);
+    padding: 14px 16px 14px 18px;
+    margin: 20px 0;
+    border-radius: 3px;
+    position: relative;
+    font-family: var(--serif);
+    font-size: 14.5px;
+    line-height: 1.55;
+    color: var(--ink);
+  }
+  .telemetry::before {
+    content: "telemetry handoff";
+    position: absolute;
+    top: -9px;
+    left: 14px;
+    background: var(--bg);
+    padding: 0 8px;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--tele);
+  }
+  .telemetry strong { color: var(--tele); font-weight: 600; }
+  .telemetry code { font-size: 0.85em; }
+
+  .twin {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin: 20px 0;
+  }
+  @media (max-width: 680px) { .twin { grid-template-columns: 1fr; } }
+  .take {
+    background: var(--bg-soft);
+    border: 1px solid var(--rule);
+    padding: 16px 18px;
+    border-radius: 3px;
+  }
+  .take h5 {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    margin: 0 0 10px;
+  }
+  .take.red h5  { color: var(--exec); }
+  .take.blue h5 { color: var(--read); }
+  .take p { font-size: 14px; line-height: 1.55; margin: 0; color: var(--ink-dim); }
+  .take p strong { color: var(--ink); }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 24px 0;
+    font-size: 14px;
+  }
+  th, td {
+    text-align: left;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+  }
+  th {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+    border-bottom: 2px solid var(--ink);
+  }
+  td { font-family: var(--serif); color: var(--ink); }
+  td:first-child {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--ink);
+    width: 32%;
+  }
+
+  /* PPL hierarchy ladder */
+  .ladder {
+    margin: 30px 0;
+    padding: 24px;
+    background: #0f1116;
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+  }
+  .ladder .caption {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-bottom: 18px;
+  }
+  .rung {
+    display: grid;
+    grid-template-columns: 60px 180px 1fr 110px;
+    gap: 12px;
+    align-items: center;
+    padding: 11px 14px;
+    border: 1px solid var(--rule);
+    background: var(--bg-card);
+    margin-bottom: 4px;
+    border-left: 3px solid var(--ink-faint);
+  }
+  .rung .lvl {
+    font-family: var(--mono);
+    font-weight: 700;
+    font-size: 13px;
+    color: var(--ink);
+  }
+  .rung .name {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--ink);
+  }
+  .rung .ex {
+    font-family: var(--serif);
+    font-style: italic;
+    color: var(--ink-dim);
+    font-size: 13.5px;
+  }
+  .rung .hex {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--tele);
+    text-align: right;
+  }
+  .rung.tcb    { border-left-color: var(--exec); }
+  .rung.win    { border-left-color: var(--write); }
+  .rung.lsa    { border-left-color: var(--pen); }
+  .rung.am     { border-left-color: var(--read); }
+  .rung.cg     { border-left-color: var(--tele); }
+  .rung.auth   { border-left-color: var(--ink-faint); }
+  @media (max-width: 720px) {
+    .rung { grid-template-columns: 50px 1fr; }
+    .rung .ex, .rung .hex { display: none; }
+  }
+
+  /* attack chain flow */
+  .flow {
+    margin: 28px 0;
+    padding: 24px;
+    background: #0f1116;
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+  }
+  .flow .caption {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-bottom: 18px;
+  }
+  .step {
+    display: grid;
+    grid-template-columns: 32px 1fr 1.4fr;
+    gap: 12px;
+    align-items: center;
+    padding: 10px 14px;
+    border: 1px solid var(--rule);
+    background: var(--bg-card);
+    margin-bottom: 4px;
+    border-left: 3px solid var(--ink-faint);
+  }
+  .step.r { border-left-color: var(--read); }
+  .step.w { border-left-color: var(--write); }
+  .step.x { border-left-color: var(--exec); }
+  .step.t { border-left-color: var(--tele); }
+  .step.p { border-left-color: var(--pen); }
+  .step .n {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-faint);
+    font-weight: 700;
+  }
+  .step .api {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--ink);
+  }
+  .step .role {
+    font-family: var(--serif);
+    font-style: italic;
+    color: var(--ink-dim);
+    font-size: 13.5px;
+  }
+  @media (max-width: 680px) {
+    .step { grid-template-columns: 26px 1fr; }
+    .step .role { display: none; }
+  }
+
+  /* technique block */
+  .technique {
+    background: var(--bg-card);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--rule);
+    border-radius: 3px;
+    padding: 22px 26px;
+    margin: 32px 0;
+  }
+  .technique .head {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 8px;
+  }
+  .technique .name {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 22px;
+    color: var(--ink);
+  }
+  .technique .author {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--tele);
+    letter-spacing: 0.05em;
+  }
+  .technique .year {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-faint);
+    margin-left: auto;
+  }
+  .technique .summary {
+    font-family: var(--serif);
+    font-style: italic;
+    color: var(--ink-dim);
+    font-size: 16px;
+    margin-bottom: 12px;
+  }
+  .technique.t1 { border-left-color: var(--read); }
+  .technique.t2 { border-left-color: var(--write); }
+  .technique.t3 { border-left-color: var(--exec); }
+  .technique.t4 { border-left-color: var(--pen); }
+
+  .rule {
+    border: none;
+    border-top: 1px dashed var(--rule);
+    margin: 64px 0;
+    position: relative;
+    text-align: center;
+  }
+  .rule::after {
+    content: "§";
+    position: absolute;
+    top: -14px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg);
+    padding: 0 14px;
+    color: var(--ink-faint);
+    font-family: var(--serif);
+    font-size: 20px;
+  }
+
+  .callout {
+    background: linear-gradient(180deg, var(--bg-card) 0%, var(--bg-soft) 100%);
+    border: 1px solid var(--rule);
+    border-top: 3px solid var(--pen);
+    padding: 22px 24px;
+    margin: 32px 0;
+    border-radius: 3px;
+  }
+  .callout .label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--pen);
+    margin-bottom: 8px;
+  }
+  .callout p:last-child { margin-bottom: 0; }
+
+  .deck { margin: 40px 0; }
+  .deck-title {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--pen);
+    margin-bottom: 4px;
+  }
+  .deck-sub {
+    font-family: var(--serif);
+    font-style: italic;
+    color: var(--ink-dim);
+    margin: 0 0 24px;
+    font-size: 16px;
+  }
+  .card-flip {
+    background: var(--bg-card);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    margin: 12px 0;
+    cursor: pointer;
+    transition: border-color 0.15s;
+    overflow: hidden;
+  }
+  .card-flip:hover { border-color: var(--pen); }
+  .card-flip .q {
+    padding: 18px 22px;
+    font-family: var(--serif);
+    color: var(--ink);
+    font-size: 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+  }
+  .card-flip .q::after {
+    content: "flip";
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    flex-shrink: 0;
+  }
+  .card-flip .a {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.25s ease-out, padding 0.25s ease-out;
+    padding: 0 22px;
+    font-family: var(--serif);
+    color: var(--ink-dim);
+    font-size: 15px;
+    line-height: 1.5;
+    background: var(--bg-soft);
+  }
+  .card-flip.open { border-color: var(--pen); }
+  .card-flip.open .a {
+    max-height: 800px;
+    padding: 16px 22px 18px;
+    border-top: 1px solid var(--rule);
+  }
+  .card-flip.open .q::after { content: "close"; color: var(--pen); }
+  .card-flip .a code { font-size: 0.85em; }
+
+  .arc-summary {
+    background: var(--bg-card);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    padding: 28px;
+    margin: 40px 0;
+  }
+  .arc-summary h3 {
+    margin-top: 0;
+    color: var(--exec);
+  }
+  .arc-summary ol {
+    font-family: var(--serif);
+    color: var(--ink);
+    padding-left: 24px;
+    margin-bottom: 0;
+  }
+  .arc-summary li { margin-bottom: 10px; }
+  .arc-summary li strong { color: var(--ink); }
+
+  .end {
+    margin-top: 100px;
+    padding-top: 40px;
+    border-top: 2px solid var(--ink);
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-faint);
+    letter-spacing: 0.05em;
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .end .sig { color: var(--exec); font-weight: 700; letter-spacing: 0.15em; }
+
+  ::selection { background: var(--pen); color: var(--bg); }
+
+  /* ============== Mobile responsive patch ============== */
+  @media (max-width: 720px) {
+    body { font-size: 16px; line-height: 1.6; }
+    .wrap { padding: 48px 18px 100px; }
+    h1 { font-size: 32px !important; line-height: 1.1; }
+    .dek { font-size: 17px; }
+    h2 { font-size: 22px; flex-wrap: wrap; gap: 8px; }
+    h2 .num { font-size: 11px; }
+    h2 + .sub { font-size: 15px; }
+    h3 { font-size: 16px; }
+    .card { padding: 18px 16px; margin: 18px 0; }
+    .card-head { gap: 8px; }
+    .card-head .type-name { font-size: 16px; word-break: break-all; }
+    .tags { margin-left: 0; flex-wrap: wrap; }
+    pre {
+      font-size: 12px;
+      padding: 12px 14px;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .legend, .legend-item { padding: 16px 14px; }
+    .twin { gap: 10px; }
+    .take { padding: 14px 14px; }
+    table { font-size: 13px; }
+    th, td { padding: 8px 10px; }
+    td:first-child { width: auto; }
+    .flow, .ladder { padding: 16px 14px; }
+    .step { font-size: 12px; padding: 9px 12px; gap: 8px; }
+    .technique { padding: 16px 16px; }
+    .technique .name { font-size: 18px; }
+    .arc-summary { padding: 18px 16px; }
+    .end { flex-direction: column; align-items: flex-start; }
+    .masthead { padding: 16px 0 14px; margin-bottom: 48px; }
+    .masthead .brand { font-size: 11px; }
+    .byline { margin-bottom: 56px; padding-bottom: 28px; font-size: 11px; }
+  }
+
+  /* Tablet adjustments */
+  @media (min-width: 721px) and (max-width: 920px) {
+    .wrap { padding: 64px 24px 120px; }
+    h1 { font-size: clamp(36px, 6vw, 50px); }
+  }
+</style>
+</head>
+<body data-nb-protected>
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="brand">blacksun<span>CUBE</span> &nbsp;·&nbsp; field notebook</div>
+    <div class="meta">vol. 12 / entry: ppl &amp; byovd · arc iii closes</div>
+  </header>
+
+  <h1>Protected Process Light &amp; Bring-Your-Own-Vulnerable-Driver,<br><em>or: the one byte that gates everything, and the only realistic way past it.</em></h1>
+  <p class="dek">The kernel byte at <code>EPROCESS+0x87a</code> that decides who can touch whom. The cross-signed driver loophole that's powered every BYOVD attack since 2018. The April 2026 Microsoft patch that finally closes it. ARC III, closed.</p>
+  <div class="byline">blacksun<span style="color:var(--exec);">CUBE</span> field notebook &middot; vol. 12 &middot; <em>closes ARC III &mdash; builds on vols. 09, 10, 11</em></div>
+
+  <p>Eleven volumes have built up to this. Vol. 09 explained where bytes live. Vol. 10 explained how the kernel notifies drivers when something happens. Vol. 11 explained how the kernel publishes a stream of events for anyone authorized to read them. All three of those rely on a single concept that was deferred until now: <em>authorization</em>. Who is allowed to register kernel callbacks? Who is allowed to consume ETW-TI? Who is allowed to prevent another process from touching them?</p>
+
+  <p>The answer in every case is: <strong>processes running at sufficiently high PPL</strong>. Specifically <code>PsProtectedSignerAntimalware-Light</code> for ETW-TI consumption (vol. 11), and the broader PPL hierarchy for general process protection. PPL is the trust mechanism that makes EDR architecturally possible on Windows.</p>
+
+  <p>And BYOVD &mdash; Bring Your Own Vulnerable Driver &mdash; is the only realistic, repeatable, in-the-wild attack against PPL that doesn't require a 0-day. <em>You don't bypass PPL with cleverness; you bypass it by getting kernel write</em>. Kernel write requires a driver. Drivers must be signed. Therefore: load somebody else's signed-but-vulnerable driver, exploit it, get kernel write, patch the <code>EPROCESS.Protection</code> byte to zero, kill the EDR.</p>
+
+  <p>This volume covers four things, in this order:</p>
+
+  <ol style="font-family: var(--serif); color: var(--ink); padding-left: 24px;">
+    <li style="margin-bottom: 10px;"><strong>The PPL data model</strong> &mdash; <code>EPROCESS.Protection</code>, <code>PS_PROTECTION</code> structure, the bit layout, the 8 signer levels, the access check that gates everything.</li>
+    <li style="margin-bottom: 10px;"><strong>How a process becomes PPL</strong> &mdash; ELAM-signed drivers, anti-malware service registration, the boot path that registers Defender / CrowdStrike / SentinelOne as Antimalware-Light.</li>
+    <li style="margin-bottom: 10px;"><strong>BYOVD attack mechanics in 2026</strong> &mdash; LOLDrivers ecosystem, the standard 4-step kill chain, EDR-killer commoditization (AuKill, Terminator, EDRKillShifter), specific 2025–2026 vulnerable drivers being weaponized.</li>
+    <li><strong>Defenses</strong> &mdash; Microsoft Vulnerable Driver Blocklist (WDB), HVCI, the <em>April 2026 cross-signed trust removal</em> (Microsoft's most consequential kernel security policy change in two decades), and the operational implications.</li>
+  </ol>
+
+  <p>Same axes:</p>
+
+  <div class="legend">
+    <div class="legend-item r">
+      <span class="tag">R &middot; Read</span>
+      <h4>The Protection byte</h4>
+      <p>One byte at <code>EPROCESS+0x87a</code> on Win 11 24H2 (offset varies by build). Reading it tells you a process's PPL level and signer. Vergilius project tracks the offset across builds.</p>
+    </div>
+    <div class="legend-item w">
+      <span class="tag">W &middot; Write</span>
+      <h4>The kernel write primitive</h4>
+      <p>Achieved via BYOVD &mdash; a vulnerable signed driver exposing arbitrary write through an IOCTL. Once you have it, every PPL guarantee dissolves. Patch the byte, target's PPL is gone.</p>
+    </div>
+    <div class="legend-item x">
+      <span class="tag">X &middot; Execute</span>
+      <h4>The access check</h4>
+      <p>In <code>PsTestProtectedProcessIncompatibility</code> and related kernel routines. Compares signer levels: requestor's level &lt; target's level → <code>STATUS_ACCESS_DENIED</code>. The check is purely data-driven, which is why patching the byte defeats it.</p>
+    </div>
+  </div>
+
+  <hr class="rule">
+
+  <!-- ========== § 01 ========== -->
+  <h2><span class="num">§ 01</span> The Protection byte</h2>
+  <p class="sub">Eight bits in <code>EPROCESS</code>. Three sub-fields. The entire PPL hierarchy fits inside this.</p>
+
+  <p>Every <code>EPROCESS</code> structure in the kernel contains a single byte called <code>Protection</code>, of type <code>PS_PROTECTION</code>. From notscimmy's <code>pplib</code>, BorderGate's reverse-engineering, and corroborated by Microsoft's own (sparse) documentation:</p>
+
+  <pre><span class="k">typedef union</span> <span class="t">_PS_PROTECTION</span> {
+    <span class="t">UCHAR</span> Level;                  <span class="c">// the whole byte</span>
+    <span class="k">struct</span> {
+        <span class="t">UCHAR</span> Type   : <span class="m">3</span>;          <span class="c">// bits 0-2: protection type</span>
+        <span class="t">UCHAR</span> Audit  : <span class="m">1</span>;          <span class="c">// bit 3: audit-only mode (rarely set)</span>
+        <span class="t">UCHAR</span> Signer : <span class="m">4</span>;          <span class="c">// bits 4-7: signer category</span>
+    } <span class="fld">Flags</span>;
+} PS_PROTECTION, *PPS_PROTECTION;
+
+<span class="c">// On Windows 11 24H2 / 25H2, the Protection byte sits at:
+//   EPROCESS + 0x87a   (verified by community via Vergilius + WinDbg)
+// On older builds it's at a different offset (e.g., 0x878 on Win 11 22H2,
+// 0x5fa on Win 10 1903). Vergilius tracks per-build offsets.</span></pre>
+
+  <p>Two enums populate the bit fields. From <code>pplib</code> source:</p>
+
+  <pre><span class="k">typedef enum</span> <span class="t">_PS_PROTECTED_TYPE</span> {
+    PsProtectedTypeNone           = <span class="m">0</span>,    <span class="c">// not protected</span>
+    PsProtectedTypeProtectedLight = <span class="m">1</span>,    <span class="c">// PPL — the common case</span>
+    PsProtectedTypeProtected      = <span class="m">2</span>,    <span class="c">// PP (full)  — DRM, audiodg.exe, anti-cheat</span>
+    PsProtectedTypeMax            = <span class="m">3</span>
+} <span class="t">PS_PROTECTED_TYPE</span>;
+
+<span class="k">typedef enum</span> <span class="t">_PS_PROTECTED_SIGNER</span> {
+    PsProtectedSignerNone         = <span class="m">0</span>,
+    PsProtectedSignerAuthenticode = <span class="m">1</span>,    <span class="c">// generic Authenticode-signed</span>
+    PsProtectedSignerCodeGen      = <span class="m">2</span>,    <span class="c">// .NET/CodeGen scenarios</span>
+    PsProtectedSignerAntimalware  = <span class="m">3</span>,    <span class="c">// EDRs, Defender, ELAM-registered AVs</span>
+    PsProtectedSignerLsa          = <span class="m">4</span>,    <span class="c">// LSASS specifically</span>
+    PsProtectedSignerWindows      = <span class="m">5</span>,    <span class="c">// general system processes</span>
+    PsProtectedSignerWinTcb       = <span class="m">6</span>,    <span class="c">// Trusted Computing Base — highest "normal"</span>
+    PsProtectedSignerWinSystem    = <span class="m">7</span>,    <span class="c">// the kernel itself / System process</span>
+    PsProtectedSignerApp          = <span class="m">8</span>     <span class="c">// store apps</span>
+} <span class="t">PS_PROTECTED_SIGNER</span>;</pre>
+
+  <h3>The hex levels you'll see in the wild</h3>
+
+  <p>The byte is read as <code>(Signer &lt;&lt; 4) | Type</code>. So the common ones:</p>
+
+  <div class="ladder">
+    <div class="caption">PPL hierarchy &middot; signer × type combinations seen in production Windows 11</div>
+    <div class="rung tcb">
+      <div class="lvl">0x72</div>
+      <div class="name">WinSystem-Light</div>
+      <div class="ex">System / kernel-spawned PPL</div>
+      <div class="hex">7&lt;&lt;4 | 1</div>
+    </div>
+    <div class="rung tcb">
+      <div class="lvl">0x62</div>
+      <div class="name">WinTcb-Full</div>
+      <div class="ex">anti-cheat (Vanguard, EAC, BattlEye), Ricochet</div>
+      <div class="hex">6&lt;&lt;4 | 2</div>
+    </div>
+    <div class="rung tcb">
+      <div class="lvl">0x61</div>
+      <div class="name">WinTcb-Light</div>
+      <div class="ex">smss.exe, csrss.exe, services.exe (TCB tier)</div>
+      <div class="hex">6&lt;&lt;4 | 1</div>
+    </div>
+    <div class="rung win">
+      <div class="lvl">0x51</div>
+      <div class="name">Windows-Light</div>
+      <div class="ex">general PPL'd Windows components</div>
+      <div class="hex">5&lt;&lt;4 | 1</div>
+    </div>
+    <div class="rung lsa">
+      <div class="lvl">0x41</div>
+      <div class="name">Lsa-Light</div>
+      <div class="ex">lsass.exe (when "RunAsPPL" enabled — opt-in)</div>
+      <div class="hex">4&lt;&lt;4 | 1</div>
+    </div>
+    <div class="rung am">
+      <div class="lvl">0x31</div>
+      <div class="name">Antimalware-Light</div>
+      <div class="ex"><strong>MsMpEng.exe (Defender), CrowdStrike, SentinelOne, Elastic Defend</strong></div>
+      <div class="hex">3&lt;&lt;4 | 1</div>
+    </div>
+    <div class="rung cg">
+      <div class="lvl">0x21</div>
+      <div class="name">CodeGen-Light</div>
+      <div class="ex">.NET Native / CodeGen scenarios</div>
+      <div class="hex">2&lt;&lt;4 | 1</div>
+    </div>
+    <div class="rung auth">
+      <div class="lvl">0x11</div>
+      <div class="name">Authenticode-Light</div>
+      <div class="ex">generic Authenticode PPL (rare)</div>
+      <div class="hex">1&lt;&lt;4 | 1</div>
+    </div>
+    <div class="rung auth">
+      <div class="lvl">0x00</div>
+      <div class="name">None</div>
+      <div class="ex">the default — your code, almost everything you'll write</div>
+      <div class="hex">0&lt;&lt;4 | 0</div>
+    </div>
+  </div>
+
+  <p>Process Explorer (sysinternals) reads this byte for every process and shows it in the "Protection" column. So does <code>!process</code> in WinDbg. <em>Memorizing the common levels (0x31, 0x41, 0x61, 0x62) means you can read any process listing and immediately know which processes are off-limits to a non-PPL caller</em>.</p>
+
+  <hr class="rule">
+
+  <!-- ========== § 02 ========== -->
+  <h2><span class="num">§ 02</span> The access check</h2>
+  <p class="sub">How the kernel decides "you can't touch this".</p>
+
+  <p>When a process calls <code>OpenProcess(target_pid, PROCESS_VM_READ | PROCESS_VM_WRITE | PROCESS_VM_OPERATION)</code>, the kernel runs through several checks. The PPL check is one of them, performed by <code>PsTestProtectedProcessIncompatibility</code> and similar internal routines. The simplified logic:</p>
+
+  <pre><span class="c">// Pseudocode of the kernel's access-check for protected processes:</span>
+
+NTSTATUS <span class="fn">CheckPplAccess</span>(EPROCESS *requestor, EPROCESS *target, ACCESS_MASK desired) {
+    <span class="t">UCHAR</span> reqProt = requestor-&gt;<span class="fld">Protection</span>.Level;
+    <span class="t">UCHAR</span> tgtProt = target-&gt;<span class="fld">Protection</span>.Level;
+
+    <span class="c">// Unprotected target: standard ACL check applies, no PPL gate</span>
+    <span class="k">if</span> (tgtProt == <span class="m">0</span>) <span class="k">return</span> <span class="fn">StandardAclCheck</span>(...);
+
+    <span class="c">// Protected target, unprotected requestor:
+    // strip dangerous access rights, allow only PROCESS_QUERY_LIMITED_INFORMATION
+    // and PROCESS_TERMINATE in some cases</span>
+    <span class="k">if</span> (reqProt == <span class="m">0</span>) {
+        <span class="k">if</span> (desired &amp; ~<span class="hl-r">PROCESS_QUERY_LIMITED_INFORMATION</span>)
+            <span class="k">return</span> <span class="hl-x">STATUS_ACCESS_DENIED</span>;
+        <span class="k">return</span> <span class="fn">StandardAclCheck</span>(...);
+    }
+
+    <span class="c">// Both protected: compare signer levels</span>
+    <span class="k">if</span> (reqProt.Signer &lt; tgtProt.Signer)
+        <span class="k">return</span> <span class="hl-x">STATUS_ACCESS_DENIED</span>;
+
+    <span class="k">return</span> <span class="fn">StandardAclCheck</span>(...);
+}</pre>
+
+  <p>Two things worth pointing out:</p>
+
+  <ul style="font-family: var(--serif); color: var(--ink); padding-left: 24px;">
+    <li style="margin-bottom: 10px;"><strong>Even SYSTEM cannot bypass this from user mode.</strong> The check is done by the kernel against the requestor's <code>EPROCESS.Protection</code>, not against its token. <code>NT AUTHORITY\SYSTEM</code> running at protection level 0 cannot open Defender (level 0x31) for read or write &mdash; the kernel returns <code>STATUS_ACCESS_DENIED</code>.</li>
+    <li><strong>The check is data-driven.</strong> It reads two bytes (requestor's and target's <code>Protection</code>), compares numbers, returns. <em>If you can flip the requestor's byte to 0x72 and the target's to 0x00, every check passes.</em> That's the entire BYOVD attack model in one sentence.</li>
+  </ul>
+
+  <h3>Handle stripping</h3>
+
+  <p>Per S12's writeup and BorderGate: even when the access check returns success, the kernel may <em>strip</em> rights from the resulting handle. Asking for <code>PROCESS_ALL_ACCESS</code> against a higher-PPL process can return a valid handle with only <code>PROCESS_QUERY_LIMITED_INFORMATION</code>. The handle is real, but you can't write memory through it. This subtlety matters: an attacker checking only <code>OpenProcess</code>'s return value misses that the handle is essentially useless. Code that walks <code>WriteProcessMemory</code> failures often reveals PPL where naive code doesn't.</p>
+
+  <hr class="rule">
+
+  <!-- ========== § 03 ========== -->
+  <h2><span class="num">§ 03</span> How a process becomes PPL</h2>
+  <p class="sub">The ELAM driver bootstrap. Why "Antimalware-Light" requires Microsoft's blessing.</p>
+
+  <p>You can't just call <code>SetProcessProtection(0x31)</code> &mdash; no such API exists. PPL is established at process creation time inside the kernel, based on:</p>
+
+  <ol style="font-family: var(--serif); color: var(--ink); padding-left: 24px;">
+    <li style="margin-bottom: 10px;"><strong>Image signature certificate.</strong> The kernel parses the binary's signature chain. The certificate must chain to a Microsoft root and contain specific OIDs (e.g., <code>1.3.6.1.4.1.311.61.4.7</code> for Antimalware) embedded by Microsoft when they sign the image.</li>
+    <li style="margin-bottom: 10px;"><strong>For Antimalware-Light specifically: an associated ELAM driver.</strong> Early-Launch-Anti-Malware drivers are loaded by the kernel before any non-boot driver. They register with the kernel via <code>EarlyLaunchAntiMalware</code> infrastructure. When the AV's user-mode service starts, the kernel checks for the registered ELAM driver. If present and Microsoft-approved (specific signing requirements), the user-mode service is allowed to launch as PPL Antimalware-Light.</li>
+    <li><strong>Process creation token signaling.</strong> The service creation request signals the desired protection. The kernel verifies all preconditions match, sets <code>EPROCESS.Protection</code> at creation, and returns. Cannot be elevated post-creation through any documented API.</li>
+  </ol>
+
+  <h3>What this means for an EDR vendor</h3>
+
+  <p>Becoming PPL Antimalware-Light is a <strong>multi-month engineering and certification process</strong>. The vendor must:</p>
+
+  <ol style="font-family: var(--serif); color: var(--ink); padding-left: 24px;">
+    <li style="margin-bottom: 6px;">Write an ELAM driver and submit it to Microsoft for review.</li>
+    <li style="margin-bottom: 6px;">Receive a special anti-malware code-signing certificate from Microsoft after passing the review.</li>
+    <li style="margin-bottom: 6px;">Sign both their ELAM driver and their user-mode service binary with the AM cert.</li>
+    <li>Configure the user-mode service to register as a PPL service via the SCM.</li>
+  </ol>
+
+  <p>This is why every commercial EDR you'll encounter &mdash; Defender, CrowdStrike Falcon, SentinelOne, Cortex XDR, Elastic Defend &mdash; runs as PPL Antimalware-Light, but a script kiddie cannot trivially run as Antimalware-Light. It's gated by Microsoft's review process.</p>
+
+  <div class="margin">
+    The certificate gating is the entire reason ETW-TI's read-side monopoly was stable from 2014 to January 2026 (vol. 11). The SecurityTrace bypass that broke that monopoly didn't break PPL itself &mdash; it found a structural way to consume TI events without being PPL. PPL itself is still an effective gate; the gate just isn't the only thing protecting the events anymore.
+  </div>
+
+  <hr class="rule">
+
+  <!-- ========== § 04 ========== -->
+  <h2><span class="num">§ 04</span> The BYOVD attack surface</h2>
+  <p class="sub">Why kernel-mode code-signing creates a paradox the attacker exploits.</p>
+
+  <p>Kernel driver loading on Windows requires a valid Authenticode signature. This is enforced by Driver Signature Enforcement (DSE) on Windows since x64 Vista. The intent: prevent arbitrary code from running in kernel mode.</p>
+
+  <p>The unintended consequence: <em>any legitimately signed driver, regardless of bugs, is accepted</em>. A driver signed by a small hardware vendor in 2018 that contains an arbitrary kernel read/write vulnerability through a misconfigured IOCTL handler will load on a fully-patched 2026 system, unless explicitly blocklisted.</p>
+
+  <p>From the CrowdStrike taxonomy (corroborated by LOLDrivers project): driver abuse falls into three categories.</p>
+
+  <table>
+    <tr><th>Category</th><th>What it is</th><th>Example</th></tr>
+    <tr><td>vulnerable</td><td>Has unintended bug — improper IOCTL access control, exposed write primitive, etc. Vendor never intended this.</td><td>Dell <code>dbutil_2_3.sys</code> (CVE-2021-21551), RTCore64.sys (MSI Afterburner)</td></tr>
+    <tr><td>weaponizable</td><td>By-design dangerous functionality exposed without sufficient access checks. Driver does what it advertises but the advertised feature is too privileged.</td><td>ProcessHacker's <code>kprocesshacker.sys</code>, several anti-cheat drivers</td></tr>
+    <tr><td>malicious</td><td>Purpose-built to disable security tools, riding on a stolen or fraudulently-obtained signing certificate.</td><td>RobbinHood ransomware's <code>gdrv.sys</code>, multiple Lazarus-attributed drivers</td></tr>
+  </table>
+
+  <p>The first two categories &mdash; vulnerable and weaponizable &mdash; are the foundation of BYOVD. They're abundant: <strong>LOLDrivers project catalogs hundreds of unique vulnerable signed drivers</strong> as of 2026, and per MagicSword/LOLDrivers research published in 2026, <em>more than 81% of those samples are signed via the cross-signed root program</em> &mdash; the policy Microsoft is finally killing in April 2026 (§ 07).</p>
+
+  <h3>Why CRL doesn't save you</h3>
+
+  <p>From Huntress research referenced in 2026 BYOVD reporting: <em>Windows does not check Certificate Revocation Lists when loading drivers</em>. A driver signed by EnCase with a certificate revoked over 15 years ago still loads successfully on a fully-updated Windows 11. The trust model is "was this ever validly signed?" not "is the certificate currently trusted?". This is why the cross-signed-driver-trust removal (§ 07) is structural rather than incremental &mdash; it changes the trust model itself, not just the revocation list.</p>
+
+  <hr class="rule">
+
+  <!-- ========== § 05 ========== -->
+  <h2><span class="num">§ 05</span> The standard BYOVD kill chain</h2>
+  <p class="sub">Four steps. Every modern EDR-killer follows this template.</p>
+
+  <p>From Sophos's coverage of AuKill (2023), Talos's DeadLock ransomware analysis (December 2025), Qilin BYOVD intrusions (April 2026), and the public LOLDrivers ecosystem &mdash; the attack flow is consistent. <strong>If your detection rules don't catch this 4-step sequence, you don't catch BYOVD.</strong></p>
+
+  <div class="flow">
+    <div class="caption">BYOVD kill chain &middot; observed in AuKill, Terminator, EDRKillShifter, DeadLock, Qilin, Warlock</div>
+    <div class="step w">
+      <div class="n">1</div>
+      <div class="api">drop the driver: WriteFile to %TEMP%\xyz.sys (admin-only path)</div>
+      <div class="role">vulnerable driver written to disk</div>
+    </div>
+    <div class="step w">
+      <div class="n">2</div>
+      <div class="api">create kernel service: CreateServiceW(... SERVICE_KERNEL_DRIVER ...)</div>
+      <div class="role">registry entry under SYSTEM\CurrentControlSet\Services</div>
+    </div>
+    <div class="step x">
+      <div class="n">3</div>
+      <div class="api">load driver: StartServiceW(...) → kernel calls IoCreateDriver</div>
+      <div class="role">vulnerable driver running in ring 0</div>
+    </div>
+    <div class="step x">
+      <div class="n">4</div>
+      <div class="api">CreateFile to driver's device → DeviceIoControl with malicious IOCTL</div>
+      <div class="role">arbitrary kernel R/W achieved</div>
+    </div>
+    <div class="step p">
+      <div class="n">5</div>
+      <div class="api">walk EPROCESS list → find Defender/EDR PID → patch Protection = 0x00</div>
+      <div class="role">PPL stripped from EDR process</div>
+    </div>
+    <div class="step t">
+      <div class="n">6</div>
+      <div class="api">unregister kernel callbacks (vol. 10) OR terminate EDR (now unprotected)</div>
+      <div class="role">EDR blinded or killed</div>
+    </div>
+  </div>
+
+  <h3>Specific drivers being weaponized in 2025–2026</h3>
+
+  <p>From BlackSnufkin's BYOVD research repository (active maintenance through April 2026), Sophos field reports, and LOLDrivers entries published in late 2025 / early 2026:</p>
+
+  <table>
+    <tr><th>Driver</th><th>Origin / CVE</th><th>Status</th></tr>
+    <tr><td><code>dbutil_2_3.sys</code></td><td>Dell (CVE-2021-21551) &mdash; the canonical example, in CISA KEV catalog</td><td>blocked by WDB; still loads on systems without HVCI</td></tr>
+    <tr><td><code>RTCore64.sys</code></td><td>MSI Afterburner — used by Lazarus 2022, still active in 2025</td><td>WDB-blocked, but unsigned variants and renames continue</td></tr>
+    <tr><td><code>sysmon.sys</code> (ThreatFire)</td><td>ThreatFire System Monitor — abused by EDRKillShifter</td><td>added to LOLDrivers after Sophos/ESET reports</td></tr>
+    <tr><td><code>K7RKScan.sys</code></td><td>K7 Computing (CVE-2025-52915, CVE-2025-1055)</td><td>recent — published 2025, BlackSnufkin PoC available</td></tr>
+    <tr><td><code>STProcessMonitor.sys</code></td><td>Safetica (CVE-2025-70795)</td><td>2025 disclosure, supports v11.11.4 / v11.26.18</td></tr>
+    <tr><td><code>NSecKrnl.sys</code></td><td>NSEC — used by ValleyRAT in the wild</td><td>2025 ITW reproduction by BlackSnufkin</td></tr>
+    <tr><td><code>GameDriverX64.sys</code></td><td>Fedeen Games (CVE-2025-61155)</td><td>recent gaming-vendor BYOVD &mdash; gaming drivers are a growing target</td></tr>
+    <tr><td><code>wnbios.sys</code></td><td>various motherboard utilities — used by RealBlindingEDR</td><td>still effective on systems without HVCI as of 2026</td></tr>
+  </table>
+
+  <p>The pattern: <em>gaming hardware utilities and motherboard tuning tools</em> are a particularly fertile target. They ship signed drivers with arbitrary read/write IOCTLs (intended for legitimate hardware debugging), they're widely distributed, and the vendors are often slow to patch.</p>
+
+  <h3>Commodity EDR-killer tools</h3>
+
+  <p>From Sophos's reporting and public catalog work:</p>
+
+  <table>
+    <tr><th>Tool</th><th>Distribution</th><th>Notes</th></tr>
+    <tr><td><strong>AuKill</strong></td><td>private — observed in ransomware chains since 2023</td><td>uses ProcessHacker driver; one of the first commodity BYOVD killers documented by Sophos</td></tr>
+    <tr><td><strong>Terminator</strong></td><td>cybercrime forums — sold for $3,000 by "SpyBoy"</td><td>uses zemana.sys (anti-malware vendor's own driver) — ironic but effective</td></tr>
+    <tr><td><strong>EDRKillShifter</strong></td><td>private — RansomHub-attributed, reported by Sophos 2024</td><td>modular, swaps drivers based on target environment; ThreatFire sysmon.sys among targets</td></tr>
+    <tr><td><strong>Blackout</strong> (ZeroMemoryEx)</td><td>public GitHub PoC</td><td>educational/research-tier but copy-pasted in real attacks</td></tr>
+    <tr><td><strong>RealBlindingEDR</strong></td><td>public</td><td>doesn't kill EDR, instead patches its kernel callbacks (vol. 10) to neuter visibility</td></tr>
+  </table>
+
+  <p>The commoditization matters. <em>BYOVD isn't an APT-only technique anymore</em>. DeadLock ransomware (Talos, Dec 2025), Qilin (April 2026), Warlock (January 2026) are all using it. Per UltraViolet Cyber's threat advisory: Warlock used Group Policy to push the BYOVD capability across an entire domain, "showing that the goal was not simply to evade protection on one endpoint but to degrade defensive coverage at scale".</p>
+
+  <hr class="rule">
+
+  <!-- ========== § 06 ========== -->
+  <h2><span class="num">§ 06</span> The Microsoft Vulnerable Driver Blocklist</h2>
+  <p class="sub">The defensive list. Necessary, not sufficient.</p>
+
+  <p>From Microsoft Learn (current as of August 2025) and Microsoft Support KB5020779: the Vulnerable Driver Blocklist (WDB) is a Microsoft-curated <code>SiPolicy.p7b</code> (WDAC code-integrity policy file) that contains hashes and certificate rules for known-bad drivers. When a driver matches an entry, the kernel refuses to load it.</p>
+
+  <h3>Where it lives and how it's enforced</h3>
+
+  <ul style="font-family: var(--serif); color: var(--ink); padding-left: 24px;">
+    <li style="margin-bottom: 8px;">File: <code>%windir%\System32\CodeIntegrity\DriverSiPolicy.p7b</code></li>
+    <li style="margin-bottom: 8px;"><strong>Enabled by default since Win 11 22H2</strong> — toggleable in Windows Security → Device security → Core isolation, but the toggle is grayed-out when HVCI is on (because HVCI requires the blocklist).</li>
+    <li style="margin-bottom: 8px;">Updated 1–2 times per year via cumulative updates — <em>not the AV definitions channel</em>. This is the slow-update problem: new BYOVD drivers added between updates are not blocked until the next servicing release.</li>
+    <li>Enforced only when one of: HVCI on, Smart App Control on, S Mode on, or Windows 11 22H2+ with the blocklist toggle on (default).</li>
+  </ul>
+
+  <h3>The coverage gap</h3>
+
+  <p>From Picus Security 2026 reporting and the LOLDrivers project: <strong>Microsoft's WDB covers a small fraction of LOLDrivers' catalog</strong>. Picus tracks the gap directly; LOLDrivers maintainers (Michael Haag, MagicSword) publish drivers Microsoft hasn't blocked. The reasons:</p>
+
+  <ul style="font-family: var(--serif); color: var(--ink); padding-left: 24px;">
+    <li style="margin-bottom: 8px;"><strong>Compatibility caution.</strong> Microsoft is hesitant to block drivers used by legitimate software. Industrial control, medical devices, specialty hardware all depend on old signed drivers. Aggressive blocking causes operational pain.</li>
+    <li style="margin-bottom: 8px;"><strong>Distribution latency.</strong> The blocklist updates ride on cumulative updates. New BYOVD drivers can be in active exploitation for months before Microsoft updates the blocklist.</li>
+    <li><strong>Bypass possibilities.</strong> Per Windows forum coverage of community CVE advisories: certain WDAC rule qualifiers behave differently on systems without HVCI. An attacker who can disable HVCI (rare but possible on some configs) gets weaker enforcement of the blocklist.</li>
+  </ul>
+
+  <h3>Operational guidance</h3>
+
+  <p>For detection engineers and EDR engineers:</p>
+
+  <ul style="font-family: var(--serif); color: var(--ink); padding-left: 24px;">
+    <li style="margin-bottom: 8px;"><strong>Ingest the LOLDrivers feed</strong> directly, don't rely on WDB alone. <code>github.com/magicsword-io/LOLDrivers</code> publishes hashes and YARA rules continuously. The ASR (Attack Surface Reduction) rule "Block abuse of exploited vulnerable signed drivers" pairs well with LOLDrivers feeds.</li>
+    <li style="margin-bottom: 8px;"><strong>Watch for the kill chain pattern in § 05, not for specific driver hashes alone.</strong> File drop → service creation → driver load → security process termination, within a 5–10 minute window from the same host: that's BYOVD regardless of which specific driver was used.</li>
+    <li><strong>Out-of-band telemetry.</strong> If your EDR is what gets killed, it can't report its own death. A secondary monitor &mdash; network telemetry, separate log shipper, or backend "agent last-seen" tracking &mdash; is essential. Treat unexpected EDR silence as the alert.</li>
+  </ul>
+
+  <hr class="rule">
+
+  <!-- ========== § 07 ========== -->
+  <h2><span class="num">§ 07</span> The April 2026 cross-signed trust kill</h2>
+  <p class="sub">Microsoft's most consequential kernel-security policy change in two decades.</p>
+
+  <div class="technique t3">
+    <div class="head">
+      <div class="name">Cross-signed kernel driver trust removal</div>
+      <div class="author">Microsoft Security &amp; Trust, announced March 26, 2026</div>
+      <div class="year">enforcement begins April 2026 Patch Tuesday</div>
+    </div>
+    <p class="summary">Effective with the April 2026 servicing release, Windows 11 24H2, 25H2, 26H1, and Windows Server 2025 stop trusting kernel drivers signed via the deprecated cross-signed root program. <em>Per LOLDrivers research, this affects more than 81% of all currently-tracked vulnerable signed drivers.</em> Rolling out in evaluation mode first to surface compatibility issues before full enforcement.</p>
+  </div>
+
+  <h3>Background — what cross-signing was and why it existed</h3>
+
+  <p>Microsoft introduced the cross-signed root program in the early 2000s to enable third-party CAs to issue Windows-trusted kernel-mode code-signing certificates. Driver vendors got their certificates from third-party CAs (DigiCert, Verisign, Comodo, etc.); Microsoft cross-certified those CAs as trusted for kernel-mode signing. The system worked by having the driver's signature chain end in a Microsoft-recognized cross-cert.</p>
+
+  <p>The program was officially deprecated in 2021, but cross-signed drivers <em>continued loading by default</em> on all Windows versions because of compatibility concerns. The result: a 20-year tail of legitimately-signed kernel drivers from defunct vendors, expired certificates, abandoned products. <strong>Per LOLDrivers' analysis published in early 2026, more than 81% of currently-cataloged vulnerable signed drivers carry cross-signed certificates</strong>. The cross-signed trust path was, effectively, the foundation of the BYOVD attack ecosystem.</p>
+
+  <h3>What changes in April 2026</h3>
+
+  <p>From Microsoft's official Tech Community announcement (March 26, 2026) and Microsoft Learn documentation:</p>
+
+  <ol style="font-family: var(--serif); color: var(--ink); padding-left: 24px;">
+    <li style="margin-bottom: 10px;"><strong>By default, only WHCP-signed drivers load.</strong> Windows Hardware Compatibility Program signing — the modern path, where drivers are tested by Microsoft and signed via the Hardware Dev Center — becomes the only default-trusted source of kernel drivers.</li>
+    <li style="margin-bottom: 10px;"><strong>Microsoft maintains an explicit allow list</strong> for "reputable cross-signed drivers" that are widely deployed and where breaking them would cause widespread outages. The allow list is small and curated.</li>
+    <li style="margin-bottom: 10px;"><strong>Initial rollout in evaluation mode.</strong> The kernel monitors driver loads for a defined period (100 hours across 3 boot cycles for Windows 11, 2 boot cycles for Server 2025). If all observed drivers are trust-policy-compliant, enforcement activates. If any non-compliant driver loads, evaluation resets.</li>
+    <li><strong>Application Control for Business (the rebranded WDAC) supports a new policy type</strong> for environments needing custom signers. The policy must be signed by an authority in the device's Secure Boot Platform Key (PK) or Key Exchange Key (KEK) variables. This gives enterprises a controlled escape hatch for internal-only signed drivers, without globally re-enabling cross-signed trust.</li>
+  </ol>
+
+  <h3>Why this is the most significant single change</h3>
+
+  <div class="callout">
+    <div class="label">strategic implication for the BYOVD landscape</div>
+    <p>Per MagicSword/LOLDrivers research, more than 81% of all currently-tracked vulnerable signed drivers depend on the cross-signed trust path. <em>Once enforcement activates on a given system, those drivers stop loading by default</em>. The remaining BYOVD attack surface contracts to: WHCP-signed-but-vulnerable drivers (rarer, since WHCP testing catches some classes of bug); compromised current certificates (requires active credential theft); and stolen certificates from current vendors (requires supply-chain compromise). The barrier to entry rises substantially.</p>
+    <p>For purple team operators in mid-to-late 2026: <em>the LOLDrivers catalog you've been using will lose effectiveness rapidly on systems that have completed evaluation mode</em>. Plan accordingly. The remaining viable drivers will be a small subset — and the WDB will be expanding to cover them too.</p>
+    <p>For detection engineers: the cross-signed-trust kill is partial protection, not a fix. Evaluation mode can take indefinitely long if there's a single non-compliant driver in the environment (per MagicSword analysis). Enterprises with old hardware, niche peripherals, or legacy software may stay in evaluation mode "indefinitely". <em>Don't assume the policy is active just because the April 2026 update is installed</em>. Monitor for the activation event in CodeIntegrity logs.</p>
+    <p>For attackers (purple side, in scope): the technique remains viable through 2026 against unpatched systems, and indefinitely viable against systems stuck in evaluation mode. But the long-term trajectory is a contracting attack surface — start planning for a world where BYOVD requires either a 0-day in a WHCP driver or a fresh credential theft.</p>
+  </div>
+
+  <h3>Operational checklist</h3>
+
+  <p>For detection / EDR engineers in 2026:</p>
+
+  <ol style="font-family: var(--serif); color: var(--ink); padding-left: 24px;">
+    <li style="margin-bottom: 8px;">Audit your fleet for systems where evaluation mode has activated vs. is still ongoing (CodeIntegrity event logs, specifically Event IDs 3076 and adjacent in <code>Microsoft-Windows-CodeIntegrity/Operational</code>).</li>
+    <li style="margin-bottom: 8px;">Identify legacy cross-signed drivers in your environment now — before enforcement activates and breaks production.</li>
+    <li style="margin-bottom: 8px;">Plan App Control for Business policies for any internal/confidential drivers that must continue to load.</li>
+    <li>Don't relax your existing BYOVD detections — the policy is a long roadway, not an immediate fix, and many systems will be in evaluation mode for extended periods.</li>
+  </ol>
+
+  <!-- removed stray tag -->
+  <hr class="rule">
+
+  <!-- ========== § 08 ========== -->
+  <h2><span class="num">§ 08</span> HVCI, VBS, and the VTL1 direction</h2>
+  <p class="sub">The hypervisor-tier defense and where Microsoft is taking it.</p>
+
+  <p>Hypervisor-Protected Code Integrity (HVCI), also called Memory Integrity, is the second layer of defense against BYOVD. From Microsoft Learn and the Veil Framework / Securityscientist 2026 BYOVD writeups:</p>
+
+  <h3>What HVCI does</h3>
+
+  <p>HVCI uses the Hyper-V hypervisor to run kernel-mode code integrity checks at <strong>VTL1</strong> (Virtual Trust Level 1) — a more privileged context than VTL0 (where the normal kernel runs). The Code Integrity (CI) policy is loaded into a Secure Kernel running at VTL1; when the normal kernel tries to make a memory page executable, the request is sent to VTL1, which verifies the page contains only signed code matching the active CI policy. <em>Pages with unsigned code, or with code matching a blocklist entry, are denied execute permission</em>.</p>
+
+  <p>For BYOVD specifically: even if an attacker loads a vulnerable driver, achieves kernel write, and tries to write shellcode or modify protected kernel structures, HVCI's W^X enforcement at VTL1 prevents the write from creating an executable page. Many BYOVD chains either require an executable page (for shellcode-style payloads) or write to specific kernel structures that VTL1 also protects (PatchGuard structures, SSDT, IDT). HVCI doesn't block all BYOVD outcomes, but it raises the cost significantly.</p>
+
+  <h3>Why HVCI isn't always on</h3>
+
+  <ul style="font-family: var(--serif); color: var(--ink); padding-left: 24px;">
+    <li style="margin-bottom: 8px;"><strong>Performance impact.</strong> Per Microsoft's own documentation and community benchmarks: HVCI imposes 5–15% overhead on syscall-heavy workloads. For latency-sensitive applications (gaming, real-time systems, virtualization), this is non-trivial.</li>
+    <li style="margin-bottom: 8px;"><strong>Driver compatibility.</strong> HVCI requires drivers be HVCI-compatible (no self-modifying code, no executable pool allocations, etc.). Many older drivers fail. Microsoft maintains a compatibility list, but many production environments have at least one driver that's incompatible.</li>
+    <li><strong>Default state varies.</strong> HVCI is on by default for Win 11 24H2+ Copilot+ PCs and most new Win 11 devices, but <em>not</em> on by default for upgrades from Win 10 or for devices with incompatible drivers detected during setup. <em>Don't assume HVCI is active in any given environment</em> — query the Device Guard Powershell APIs to verify.</li>
+  </ul>
+
+  <h3>Where this is going</h3>
+
+  <p>Microsoft has been progressively pushing security-critical state into VTL1. Credential Guard moved LSA secrets into VTL1 in 2015. HVCI expanded VTL1 enforcement to driver code in 2017+. As of Win 11 25H2 / 26H1, additional kernel structures (token state, certain ETW provider registrations, parts of the object manager) are gradually moving toward VTL1 protection. The trajectory: <em>over the next 2–3 years, the meaningful kernel attack surface for BYOVD will progressively shrink as more state migrates to VTL1, where even ring-0 code can't trivially modify it</em>.</p>
+
+  <hr class="rule">
+
+  <!-- ========== § 09 ========== -->
+  <h2><span class="num">§ 09</span> Detection chokepoints in 2026</h2>
+  <p class="sub">Six signals that catch BYOVD attacks, ordered by reliability.</p>
+
+  <div class="twin">
+    <div class="take blue">
+      <h5>1 &middot; Driver hash lookup against LOLDrivers</h5>
+      <p>Sysmon Event ID 6 (driver loaded) — every driver load gives you the hash. Automated lookup against LOLDrivers feed alerts on known-bad. Highest signal/noise ratio. Defeated only by drivers not yet in the catalog.</p>
+    </div>
+    <div class="take blue">
+      <h5>2 &middot; The 4-step kill chain correlation</h5>
+      <p>File drop (.sys) → service creation (SCM) → driver load → security process termination, all within a 5–10 minute window from the same host. Behavioral, technique-agnostic. Catches BYOVD regardless of which specific driver was used. Build this in your SIEM.</p>
+    </div>
+    <div class="take blue">
+      <h5>3 &middot; EDR agent silence detection</h5>
+      <p>Backend monitoring of agent last-seen timestamps. Alert on unexpected gaps. If your EDR goes silent and the host is still online, treat as compromised until proven otherwise. The detection happens off-box because the box may be compromised.</p>
+    </div>
+    <div class="take blue">
+      <h5>4 &middot; ETW-TI <code>DRIVER_LOAD</code> with anomalous origin</h5>
+      <p>Per vol. 11, ETW-TI emits driver load events with full context. Hunt for driver loads from unusual paths (<code>%TEMP%</code>, user-writable directories), or with timing patterns (driver loaded within seconds of high-privilege user logon). Lower signal, requires baselining.</p>
+    </div>
+    <div class="take blue">
+      <h5>5 &middot; Kernel callback integrity check</h5>
+      <p>EDR's own kernel driver periodically verifies its callback registrations are still active (vol. 10). Loss of callback indicates either driver unload (legitimate) or kernel-side tampering (BYOVD). EDR vendor tamper-protection logic. Defeated by attackers who patch quietly without unregistering.</p>
+    </div>
+    <div class="take blue">
+      <h5>6 &middot; HVCI / WDB activation status monitoring</h5>
+      <p>Track per-host whether HVCI is enabled and whether April 2026 cross-signed-trust enforcement is active vs in evaluation mode. CodeIntegrity event logs. Hosts not in enforcement mode get higher BYOVD risk score; pivot detections accordingly.</p>
+    </div>
+  </div>
+
+  <p>The pattern across all six: <em>no single signal catches everything, and the high-fidelity ones (1, 2, 3) are independent of which specific driver is used</em>. The theme of vols. 09–12 has been composite signals, and BYOVD is no different.</p>
+
+  <hr class="rule">
+
+  <!-- ========== § 10 ========== -->
+  <div class="deck">
+    <div class="deck-title">§ 10 &nbsp;·&nbsp; the 30-second recall</div>
+    <h2 style="margin-top: 6px;">Flashcards</h2>
+    <p class="deck-sub">Eight questions. If you can answer all without notes, you understand the kernel frontier.</p>
+
+    <div class="card-flip" onclick="this.classList.toggle('open')">
+      <div class="q">Where does the PPL state of a process live, and what's its bit layout?</div>
+      <div class="a">In <code>EPROCESS.Protection</code>, a <code>PS_PROTECTION</code> union: a single byte interpreted as bits 0–2 = Type (None/Light/Full), bit 3 = Audit (rarely set), bits 4–7 = Signer (Authenticode, CodeGen, Antimalware, Lsa, Windows, WinTcb, WinSystem, App). On Windows 11 24H2 the offset is 0x87a, on older builds it's at different offsets (0x878 on 22H2, 0x5fa on Win 10 1903). The Vergilius project tracks per-build offsets.</div>
+    </div>
+
+    <div class="card-flip" onclick="this.classList.toggle('open')">
+      <div class="q">A SYSTEM-privileged process (token level: NT AUTHORITY\SYSTEM) tries to <code>OpenProcess(MsMpEng.exe, PROCESS_VM_WRITE)</code>. What happens?</div>
+      <div class="a">Returns <code>STATUS_ACCESS_DENIED</code>. Defender (MsMpEng.exe) runs at protection level 0x31 (Antimalware-Light), the requestor at protection 0x00. The kernel's PPL access check in <code>PsTestProtectedProcessIncompatibility</code> compares signer levels and refuses the open. SYSTEM token doesn't matter — PPL is a parallel access-control system that operates on <code>EPROCESS.Protection</code>, not on tokens.</div>
+    </div>
+
+    <div class="card-flip" onclick="this.classList.toggle('open')">
+      <div class="q">What does a vendor have to do to make their EDR run at PPL Antimalware-Light?</div>
+      <div class="a">Four things, gated by Microsoft: (1) write an ELAM driver and submit it to Microsoft for review; (2) receive a special anti-malware code-signing certificate from Microsoft after passing review; (3) sign both the ELAM driver and the user-mode service binary with the AM certificate; (4) configure the user-mode service to register as PPL via the SCM. Cannot be elevated to PPL post-creation through any documented API. The certificate gating is what makes "every commercial EDR is PPL Antimalware-Light" both possible and exclusive.</div>
+    </div>
+
+    <div class="card-flip" onclick="this.classList.toggle('open')">
+      <div class="q">What is BYOVD, and why does kernel driver code-signing make it possible?</div>
+      <div class="a">Bring Your Own Vulnerable Driver: load a legitimately-signed but vulnerable kernel driver onto the target, exploit a vulnerability in it (typically an arbitrary R/W primitive exposed through an IOCTL handler), gain ring-0 capability, then patch <code>EPROCESS.Protection</code> to disable PPL or unregister kernel callbacks. Possible because Windows kernel signing enforces "was this validly signed at any point?", not "is the certificate currently trusted, and is the driver bug-free?". A driver signed in 2018 by a now-defunct vendor with a now-expired certificate still loads on a 2026 system, unless explicitly blocklisted. Windows doesn't check CRL when loading drivers.</div>
+    </div>
+
+    <div class="card-flip" onclick="this.classList.toggle('open')">
+      <div class="q">Name the four steps of the standard BYOVD kill chain.</div>
+      <div class="a">(1) Drop the driver: <code>WriteFile</code> to a temp path. (2) Create kernel service: <code>CreateServiceW(... SERVICE_KERNEL_DRIVER ...)</code>, registering an entry under <code>HKLM\SYSTEM\CurrentControlSet\Services</code>. (3) Load driver: <code>StartServiceW</code>, which calls <code>NtLoadDriver</code> in the kernel, leading to driver entry-point execution. (4) Communicate via IOCTL: <code>CreateFile</code> against the driver's device, <code>DeviceIoControl</code> with the malicious IOCTL code, achieving arbitrary kernel R/W. Steps 5–6 are post-exploitation: walk EPROCESS list, patch Protection on the EDR's process to 0x00, terminate or unregister the EDR.</div>
+    </div>
+
+    <div class="card-flip" onclick="this.classList.toggle('open')">
+      <div class="q">What is the Microsoft Vulnerable Driver Blocklist (WDB) and why isn't it sufficient on its own?</div>
+      <div class="a">A Microsoft-curated WDAC code-integrity policy file (<code>DriverSiPolicy.p7b</code>) at <code>%windir%\System32\CodeIntegrity\</code> containing hashes and certificate rules for known-bad drivers. Enabled by default on Win 11 22H2+; enforced strongly when HVCI / Smart App Control / S Mode is on. Insufficient because: (1) updated only 1–2 times per year via cumulative updates, not continuously like AV signatures, leaving latency gaps; (2) covers a small fraction of LOLDrivers' catalog due to compatibility caution; (3) on systems without HVCI, certain WDAC rule qualifiers behave differently. Defenders should ingest LOLDrivers feeds directly to fill the gap, plus enable the ASR rule "Block abuse of exploited vulnerable signed drivers".</div>
+    </div>
+
+    <div class="card-flip" onclick="this.classList.toggle('open')">
+      <div class="q">What is Microsoft's April 2026 cross-signed driver trust removal, and what's its impact on the BYOVD ecosystem?</div>
+      <div class="a">Effective with the April 2026 servicing release, Windows 11 24H2/25H2/26H1 and Windows Server 2025 stop trusting kernel drivers signed via the deprecated cross-signed root program (a 2000s-era trust path that was deprecated in 2021 but kept active for compatibility). Per LOLDrivers research, 81%+ of currently-cataloged vulnerable signed drivers depend on this trust path. Once enforcement activates on a system (after evaluation mode completes — 100 hours across 3 boot cycles), those drivers stop loading by default. The remaining BYOVD surface contracts to WHCP-signed-but-vulnerable drivers, compromised current certificates, and stolen current vendor certificates. Microsoft maintains a small allow-list for widely-deployed cross-signed drivers, and provides PK/KEK-signed App Control policies as an enterprise escape hatch.</div>
+    </div>
+
+    <div class="card-flip" onclick="this.classList.toggle('open')">
+      <div class="q">An attacker has loaded a vulnerable driver, achieved kernel write, and patched <code>MsMpEng.exe</code>'s Protection byte to 0x00. Defender is now unprotected. What do they typically do next, and what's the best detection signal?</div>
+      <div class="a">Typically: <code>TerminateProcess</code> on the now-unprotected MsMpEng.exe, OR call into the driver to unregister Defender's kernel callbacks (vol. 10) so it stops receiving telemetry without obviously dying. Best detection signal: <strong>EDR agent silence detection at the management plane</strong>. Backend monitoring of agent last-seen timestamps catches the attack regardless of which specific technique was used to disable the EDR — and crucially, it operates off-box, so it works even when on-box telemetry is gone. Pair with HVCI status monitoring to identify hosts at higher risk before an attack happens.</div>
+    </div>
+  </div>
+
+  <hr class="rule">
+
+  <!-- ========== § 11 ========== -->
+  <h2><span class="num">§ 11</span> ARC III closes</h2>
+  <p class="sub">Twelve volumes. The kernel frontier, mapped.</p>
+
+  <div class="arc-summary">
+    <h3>The full ARC III synthesis</h3>
+    <ol>
+      <li><strong>Vol. 09 — Memory Manipulation Primitives.</strong> Where every byte that runs has been allocated. <code>VirtualAlloc</code> semantics, W^X / ACG / CFG / CET, sleep masks (Ekko, Cronos, FOLIAGE), pe-sieve and hollows_hunter as the scanning tools.</li>
+      <li><strong>Vol. 10 — Kernel Callbacks.</strong> The synchronous notification path. <code>PsSetCreate*NotifyRoutine</code>, <code>ObRegisterCallbacks</code>, <code>CmRegisterCallback</code>, minifilters, WFP. The 1500+ Mandatory-Access-Control surface that EDRs have. EDRSandblast as the canonical BYOVD-against-callbacks tool. PatchGuard and the WDB raising the cost.</li>
+      <li><strong>Vol. 11 — ETW Deep Dive.</strong> The asynchronous notification path. Provider/Session/Consumer/Controller. <code>WMI_LOGGER_CONTEXT</code>, <code>EtwSiloState</code>. ETW-TI as the kernel-side telemetry monopoly that powered EDR for a decade. The January 2026 SecurityTrace bypass that broke that monopoly.</li>
+      <li><strong>Vol. 12 — PPL & BYOVD.</strong> The trust mechanism that gates everything in vols. 10 and 11. The <code>EPROCESS.Protection</code> byte. The cross-signed driver loophole. The April 2026 Microsoft policy change that cuts 81% of the historical BYOVD attack surface.</li>
+    </ol>
+  </div>
+
+  <p>The composite picture, in 2026:</p>
+
+  <p>An EDR exists as a PPL Antimalware-Light user-mode process backed by a kernel driver. The kernel driver registers callbacks (vol. 10) for synchronous visibility into process / thread / image / object events. The user-mode process consumes ETW-TI (vol. 11) for asynchronous high-fidelity events about kernel-sensitive operations. PPL (vol. 12) prevents non-PPL processes from tampering with either the user-mode side or its handles. Memory-integrity scanning (vol. 09) finds anomalies in process memory regardless of how they got there.</p>
+
+  <p>Each layer has its own bypass family. Vol. 09 is bypassed by sleep masks and call-stack spoofing. Vol. 10 is bypassed by BYOVD-driven callback-removal (EDRSandblast). Vol. 11 is bypassed at user-mode by patching EtwEventWrite/NtTraceEvent (commodity tradecraft) and at kernel-mode by SecurityTrace AutoLogger registration (Connor McGarr, January 2026). Vol. 12's PPL is bypassed by BYOVD with kernel-write achieving direct EPROCESS patching.</p>
+
+  <p>What remains true across all four is the <em>composite signal model</em>: any single layer can be defeated, but bypassing all four simultaneously requires kernel-mode capability AND careful evasion of the still-functional layers. <strong>The defender's job in 2026 is not to make any single layer impenetrable, but to ensure that bypassing any one of them leaves traces in the others</strong>. ETW-TI silencing is detected by callback events. Callback removal is detected by ETW-TI events. PPL stripping is detected by the EDR backend's agent-silence monitoring. Memory anomalies are detected by periodic scans regardless of how the memory got that way.</p>
+
+  <p>That's the kernel frontier as it actually is. Twelve volumes to map it because there's no shorter path that's honest.</p>
+
+  <hr class="rule">
+
+  <!-- ========== § 12 ========== -->
+  <h2><span class="num">§ 12</span> Closing thought, and what's next</h2>
+  <p class="sub"><em>ARC = thematic series of volumes</em></p>
+
+  <p>ARC I (vols. 01–04) gave you the foundations: data types, PE format, processes/threads, the loader. The alphabet, the skeleton, the running state, and the machinery that builds it.</p>
+
+  <p>ARC II (vols. 05–08) gave you the user-mode battlefield: syscalls, hooking, two-part process injection taxonomy. Where 80% of malware-vs-EDR fights happen, and where Hell's Gate, Halo's Gate, indirect syscalls, herpaderping, ghosting, AtomBombing, and module stomping all live.</p>
+
+  <p>ARC III (vols. 09–12) gave you the kernel frontier: memory primitives, callbacks, ETW, PPL/BYOVD. The defender's home turf, and the only remaining ground where a real engineering edge exists.</p>
+
+  <p>For purple team operators in mid-2026: the techniques in this volume are useful, but the timeline matters. <em>BYOVD's golden age is ending</em>. The April 2026 cross-signed trust kill removes 81% of the historical attack surface. By late 2026 / early 2027, plan for a world where BYOVD requires either a 0-day in a WHCP driver, a freshly-stolen current-vendor certificate, or operating against systems stuck in evaluation mode. The technique remains viable; the cost of viability is rising fast.</p>
+
+  <p>For detection engineers: the priorities are clear. Ingest LOLDrivers continuously (don't wait for WDB updates). Build the 4-step kill chain correlation in your SIEM. Set up backend agent-silence monitoring. Track HVCI status and April-2026-policy activation status per host. Layer detection across vols. 09–12, because no single layer is sufficient.</p>
+
+  <p>For EDR/XDR engineers: the four-pillar architecture (memory scanning + kernel callbacks + ETW-TI + PPL self-protection) is the production model. None of the four pillars is novel; the engineering edge is in how cleanly they're integrated, how quickly the backend correlates signals across them, and how robustly the on-box agent survives BYOVD. The McGarr SecurityTrace bypass and the cross-signed trust kill are both reasons to <em>rethink your assumptions about who can see what</em> — design as if the attacker can read your ETW-TI, and as if BYOVD will keep working for at least 18 more months on systems with old hardware.</p>
+
+  <h3>ARC III closes here.</h3>
+
+  <p>Twelve volumes is enough material to onboard a serious EDR engineer or purple teamer end-to-end.</p>
+  <p>ARC IV, Living Telemetry, is where the work shifts from "understand the surface" to "build production detections on it": Sysmon deep dive, Sigma/KQL/EQL rule writing, the purple team loop, threat hunting hypotheses.</p>
+  <p>ARC V, advanced topics, covers the corners we've intentionally skipped: WoW64 mechanics, COM/DCOM internals, WMI, authentication internals (LSASS / Kerberos / NTLM at the kernel level), AppContainer / Windows Sandbox, full HVCI / VBS deep dive.</p>
+  <h4><em>ARC IV starts after a pause.</em></h4>
+
+  <footer class="end">
+    <div>filed under &middot; windows internals &middot; ppl &middot; byovd &middot; arc iii closes</div>
+    <div class="sig">&mdash; blacksunCUBE</div>
+  </footer>
+
+</div>
+<script src="/assets/js/notebook-guard.js" defer></script>
+</body>
+</html>
