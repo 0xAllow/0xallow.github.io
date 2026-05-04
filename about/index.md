@@ -6,11 +6,9 @@ eyebrow: Profile
 lead: Part-Time cybersecurity researcher. Windows internals, malware analysis and purple team.
 ---
 
-I'm **0xAllow**, the researcher behind blacksunCUBE. I do this in my spare time,
-mostly around **Windows internals**, **malware analysis** and **purple team
-research**  with a growing focus on **EDR/XDR engineering** and how modern
-telemetry pipelines actually hold up against current adversary tooling.
-
+I'm **0xAllow**, the researcher behind blacksunCUBE.
+I do this in my spare time,
+mostly around **Windows internals** and **purple team** operations.
 
 ## How I work
 
