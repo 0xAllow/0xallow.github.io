@@ -762,21 +762,21 @@ description: "The architecture of Windows telemetry — providers, sessions, con
   </header>
 
   <h1>Event Tracing for Windows,<br><em>or: where the EDR's other half of the truth comes from.</em></h1>
-  <p class="dek">An architectural walk through providers, sessions, and consumers &mdash; the kernel-side data structures, the Threat-Intelligence provider that mature EDRs depend on, and the January 2026 disclosure that broke a 12-year defensive assumption.</p>
+  <p class="dek">An architectural walk through providers, sessions, and consumers  the kernel-side data structures, the Threat-Intelligence provider that mature EDRs depend on, and the January 2026 disclosure that broke a 12-year defensive assumption.</p>
   <div class="byline">blacksun<span style="color:var(--exec);">CUBE</span> field notebook &middot; vol. 11 &middot; <em>builds on vols. 05, 06, 09, 10</em></div>
 
-  <p>Vol. 10 covered kernel callbacks &mdash; the synchronous notification path. When a process is created, the kernel <em>calls</em> registered functions inside loaded drivers. Those callbacks fire in the kernel thread that's doing the work, the driver inspects, optionally modifies, and returns. The key word is synchronous.</p>
+  <p>Vol. 10 covered kernel callbacks  the synchronous notification path. When a process is created, the kernel <em>calls</em> registered functions inside loaded drivers. Those callbacks fire in the kernel thread that's doing the work, the driver inspects, optionally modifies, and returns. The key word is synchronous.</p>
 
-  <p>This volume covers ETW &mdash; the asynchronous one. Events are written to a buffer, a separate consumer process reads them later. The kernel doesn't wait. The producer doesn't know who the consumers are. It's a publish-subscribe system glued to the side of the kernel, designed originally for performance tracing and overloaded over time into the primary security telemetry channel for Windows.</p>
+  <p>This volume covers ETW  the asynchronous one. Events are written to a buffer, a separate consumer process reads them later. The kernel doesn't wait. The producer doesn't know who the consumers are. It's a publish-subscribe system glued to the side of the kernel, designed originally for performance tracing and overloaded over time into the primary security telemetry channel for Windows.</p>
 
   <p>Both vol. 10's callbacks and this volume's ETW are observable in user space, but the architectures are different and the attacks against them are different. Callbacks run inline so removing them blinds the consumer immediately. ETW sessions are decoupled, so you can disable the consumer without the producer ever knowing. Both matter; both have their own bypass families.</p>
 
   <p>Three things to nail down here:</p>
 
   <ol style="font-family: var(--serif); color: var(--ink); padding-left: 24px;">
-    <li style="margin-bottom: 10px;"><strong>The four-component architecture</strong> &mdash; provider, session, controller, consumer. Drilled into Microsoft's own docs and reproduced in every blog written about ETW. Once you know what each one does, you can read any ETW disclosure in 10 seconds.</li>
-    <li style="margin-bottom: 10px;"><strong>The kernel-side data structures</strong> &mdash; <code>WMI_LOGGER_CONTEXT</code>, <code>EtwSiloState</code>, <code>EtwpLoggerContext</code> array. These are where ETW lives in kernel memory. BYOVD attackers patch fields in <code>WMI_LOGGER_CONTEXT</code> to disable specific providers. Defensive forensics tools (JPCERT's etw-scan) walk these structures to recover dropped events.</li>
-    <li><strong>The Threat-Intelligence provider</strong> and the <code>SecurityTrace</code> flag &mdash; what they're for, why ETW-TI was the gold standard for kernel telemetry from 2014 to 2025, and the January 2026 Connor McGarr disclosure that changed everything.</li>
+    <li style="margin-bottom: 10px;"><strong>The four-component architecture</strong>  provider, session, controller, consumer. Drilled into Microsoft's own docs and reproduced in every blog written about ETW. Once you know what each one does, you can read any ETW disclosure in 10 seconds.</li>
+    <li style="margin-bottom: 10px;"><strong>The kernel-side data structures</strong>  <code>WMI_LOGGER_CONTEXT</code>, <code>EtwSiloState</code>, <code>EtwpLoggerContext</code> array. These are where ETW lives in kernel memory. BYOVD attackers patch fields in <code>WMI_LOGGER_CONTEXT</code> to disable specific providers. Defensive forensics tools (JPCERT's etw-scan) walk these structures to recover dropped events.</li>
+    <li><strong>The Threat-Intelligence provider</strong> and the <code>SecurityTrace</code> flag  what they're for, why ETW-TI was the gold standard for kernel telemetry from 2014 to 2025, and the January 2026 Connor McGarr disclosure that changed everything.</li>
   </ol>
 
   <p>Same axes:</p>
@@ -882,13 +882,13 @@ ntdll!<span class="fn">EtwEventWrite</span>
                 → nt!<span class="fn">EtwpProcessEvent</span>     <span class="c">// dispatch into appropriate session</span>
                     → write into <span class="fld">WMI_LOGGER_CONTEXT</span>'s buffer</pre>
 
-  <p>The user-mode chokepoints &mdash; <code>EtwEventWrite</code> at <code>ntdll!</code> and the syscall <code>NtTraceEvent</code> &mdash; are exactly what user-mode bypasses target. We'll come back to that in § 07.</p>
+  <p>The user-mode chokepoints  <code>EtwEventWrite</code> at <code>ntdll!</code> and the syscall <code>NtTraceEvent</code>  are exactly what user-mode bypasses target. We'll come back to that in § 07.</p>
 
   <h3>Where providers live</h3>
 
   <p>A provider is identified by a GUID. Microsoft's manifest-based providers ship as <code>.man</code> XML files compiled into the binary that hosts them; the manifest tells consumers what events the provider emits and what fields they have. Modern providers use TraceLogging, which embeds the metadata directly in the binary as opaque blobs (Matt Graeber documented the format).</p>
 
-  <p>The kernel itself is a provider. The <code>NT Kernel Logger</code> session, when started, captures kernel-emitted events &mdash; process create, thread create, image load, file I/O, registry, network &mdash; via the <code>Windows Kernel Trace</code> classic provider. This is the <em>oldest</em> ETW path; modern security work uses the manifest-based providers like <code>Microsoft-Windows-Kernel-Process</code> instead, which provide finer-grained control and richer event data.</p>
+  <p>The kernel itself is a provider. The <code>NT Kernel Logger</code> session, when started, captures kernel-emitted events  process create, thread create, image load, file I/O, registry, network  via the <code>Windows Kernel Trace</code> classic provider. This is the <em>oldest</em> ETW path; modern security work uses the manifest-based providers like <code>Microsoft-Windows-Kernel-Process</code> instead, which provide finer-grained control and richer event data.</p>
 
   <hr class="rule">
 
@@ -913,7 +913,7 @@ ntdll!<span class="fn">EtwEventWrite</span>
 
   <p>JPCERT's <strong>etw-scan</strong> (a Volatility plugin published November 2024) walks the <code>EtwpLoggerContext</code> array, finds each <code>WMI_LOGGER_CONTEXT</code>, follows its <code>GlobalList</code> buffer field, and extracts events from the kernel buffer in memory. <em>Even after an attacker stops a session and deletes the <code>.etl</code> file, the buffered events may still be in kernel memory until the buffer is reused.</em> This makes ETW recovery a powerful forensic primitive.</p>
 
-  <p>For purple team operators: knowing this means an attacker who only stops the session and removes the file has <em>not</em> erased their telemetry &mdash; the buffer contents persist briefly. Live-response tooling that snapshots kernel memory captures these residual events. Properly-engineered ETW evasion has to either operate at the user-mode emission point (so events never reach the buffer) or patch the buffer itself.</p>
+  <p>For purple team operators: knowing this means an attacker who only stops the session and removes the file has <em>not</em> erased their telemetry  the buffer contents persist briefly. Live-response tooling that snapshots kernel memory captures these residual events. Properly-engineered ETW evasion has to either operate at the user-mode emission point (so events never reach the buffer) or patch the buffer itself.</p>
 
   <hr class="rule">
 
@@ -921,24 +921,24 @@ ntdll!<span class="fn">EtwEventWrite</span>
   <h2><span class="num">§ 04</span> The Threat-Intelligence provider, revisited</h2>
   <p class="sub">Vol. 05 introduced this. Now we open it up.</p>
 
-  <p><code>Microsoft-Windows-Threat-Intelligence</code> &mdash; ETW-TI &mdash; is a kernel-side provider that emits events on a curated list of security-sensitive operations. The events fire inside the kernel implementation of the corresponding <code>Nt*</code> function, which means they're invariant to user-mode invocation method (vol. 05). Direct syscalls don't bypass them. Hardware breakpoints don't bypass them. Hooks at <code>ntdll</code> don't bypass them. The events fire when the kernel does the work, and the kernel always does the work.</p>
+  <p><code>Microsoft-Windows-Threat-Intelligence</code>  ETW-TI  is a kernel-side provider that emits events on a curated list of security-sensitive operations. The events fire inside the kernel implementation of the corresponding <code>Nt*</code> function, which means they're invariant to user-mode invocation method (vol. 05). Direct syscalls don't bypass them. Hardware breakpoints don't bypass them. Hooks at <code>ntdll</code> don't bypass them. The events fire when the kernel does the work, and the kernel always does the work.</p>
 
   <p>The set of events ETW-TI emits, current as of Windows 11 25H2:</p>
 
   <table>
     <tr><th>Event class</th><th>Fires when</th></tr>
     <tr><td>ALLOCVM_LOCAL / REMOTE</td><td><code>NtAllocateVirtualMemory</code> in current vs. another process</td></tr>
-    <tr><td>PROTECTVM_LOCAL / REMOTE</td><td><code>NtProtectVirtualMemory</code> &mdash; protection changes</td></tr>
-    <tr><td>READVM_LOCAL / REMOTE</td><td><code>NtReadVirtualMemory</code> &mdash; the "LSASS read" canary</td></tr>
-    <tr><td>WRITEVM_LOCAL / REMOTE</td><td><code>NtWriteVirtualMemory</code> &mdash; cross-process writes</td></tr>
-    <tr><td>MAPVIEW_OF_SECTION</td><td><code>NtMapViewOfSection</code> &mdash; section mapping into a process</td></tr>
-    <tr><td>QUEUE_USER_APC</td><td><code>NtQueueApcThread(Ex)</code> &mdash; APC queueing across processes</td></tr>
-    <tr><td>SET_THREAD_CONTEXT</td><td><code>NtSetContextThread</code> &mdash; thread RIP redirection</td></tr>
+    <tr><td>PROTECTVM_LOCAL / REMOTE</td><td><code>NtProtectVirtualMemory</code>  protection changes</td></tr>
+    <tr><td>READVM_LOCAL / REMOTE</td><td><code>NtReadVirtualMemory</code>  the "LSASS read" canary</td></tr>
+    <tr><td>WRITEVM_LOCAL / REMOTE</td><td><code>NtWriteVirtualMemory</code>  cross-process writes</td></tr>
+    <tr><td>MAPVIEW_OF_SECTION</td><td><code>NtMapViewOfSection</code>  section mapping into a process</td></tr>
+    <tr><td>QUEUE_USER_APC</td><td><code>NtQueueApcThread(Ex)</code>  APC queueing across processes</td></tr>
+    <tr><td>SET_THREAD_CONTEXT</td><td><code>NtSetContextThread</code>  thread RIP redirection</td></tr>
     <tr><td>CREATE_THREAD_EX</td><td><code>NtCreateThreadEx</code> with start address details</td></tr>
     <tr><td>DRIVER_LOAD / IMAGE_LOAD</td><td>kernel driver / image mapping events with full context</td></tr>
   </table>
 
-  <p>That list is a near-perfect map onto the offensive techniques covered in vols. 06&ndash;08. Every primitive used by classic injection, hollowing, doppelg&auml;nging, herpaderping, ghosting, AtomBombing, module stomping, sleep masks &mdash; <em>each one fires at least one ETW-TI event</em>. The attack model that "we'll just direct-syscall to bypass the user-mode hook" is correct for the user-mode hook and irrelevant for ETW-TI.</p>
+  <p>That list is a near-perfect map onto the offensive techniques covered in vols. 06&ndash;08. Every primitive used by classic injection, hollowing, doppelg&auml;nging, herpaderping, ghosting, AtomBombing, module stomping, sleep masks  <em>each one fires at least one ETW-TI event</em>. The attack model that "we'll just direct-syscall to bypass the user-mode hook" is correct for the user-mode hook and irrelevant for ETW-TI.</p>
 
   <h3>Who is allowed to consume ETW-TI</h3>
 
@@ -959,16 +959,16 @@ ntdll!<span class="fn">EtwEventWrite</span>
   <p>Each AutoLogger key contains: enable settings, buffer configuration, and a list of provider GUIDs as subkeys. Concrete real-world AutoLoggers visible on a Windows 11 machine with Defender:</p>
 
   <ul style="font-family: var(--serif); color: var(--ink); padding-left: 24px;">
-    <li style="margin-bottom: 6px;"><code>EventLog-Security</code> &mdash; classic Windows Security Event Log feed.</li>
-    <li style="margin-bottom: 6px;"><code>DefenderApiLogger</code> &mdash; Defender's primary kernel telemetry intake.</li>
-    <li style="margin-bottom: 6px;"><code>DefenderAuditLogger</code> &mdash; Defender audit-mode telemetry.</li>
-    <li style="margin-bottom: 6px;"><code>DiagLog</code>, <code>Diagtrack-Listener</code> &mdash; OS diagnostics.</li>
-    <li><code>Circular Kernel Context Logger</code> &mdash; rolling kernel-event buffer.</li>
+    <li style="margin-bottom: 6px;"><code>EventLog-Security</code>  classic Windows Security Event Log feed.</li>
+    <li style="margin-bottom: 6px;"><code>DefenderApiLogger</code>  Defender's primary kernel telemetry intake.</li>
+    <li style="margin-bottom: 6px;"><code>DefenderAuditLogger</code>  Defender audit-mode telemetry.</li>
+    <li style="margin-bottom: 6px;"><code>DiagLog</code>, <code>Diagtrack-Listener</code>  OS diagnostics.</li>
+    <li><code>Circular Kernel Context Logger</code>  rolling kernel-event buffer.</li>
   </ul>
 
-  <h3>What makes AutoLoggers special &mdash; the security implication</h3>
+  <h3>What makes AutoLoggers special  the security implication</h3>
 
-  <p>Per Connor McGarr's January 2026 reverse-engineering of <code>EtwpEnableAutoLoggerProvider</code>: <em>AutoLogger sessions don't go through the standard <code>EnableTraceEx2</code> path</em>. They're started in the context of the System process &mdash; effectively the kernel itself &mdash; via <code>EtwpEnableAutoLoggerProvider</code>. Because the requesting "process" is the kernel, there's no Antimalware-Light check at provider-enable time; the kernel can enable any provider, including <code>Microsoft-Windows-Threat-Intelligence</code> and <code>Microsoft-Windows-Kernel-Audit-Api-Calls</code>.</p>
+  <p>Per Connor McGarr's January 2026 reverse-engineering of <code>EtwpEnableAutoLoggerProvider</code>: <em>AutoLogger sessions don't go through the standard <code>EnableTraceEx2</code> path</em>. They're started in the context of the System process  effectively the kernel itself  via <code>EtwpEnableAutoLoggerProvider</code>. Because the requesting "process" is the kernel, there's no Antimalware-Light check at provider-enable time; the kernel can enable any provider, including <code>Microsoft-Windows-Threat-Intelligence</code> and <code>Microsoft-Windows-Kernel-Audit-Api-Calls</code>.</p>
 
   <p>To compensate for the missing enable-time check, the kernel sets a flag on the resulting session: the <code>SecurityTrace</code> bit in <code>WMI_LOGGER_CONTEXT.Flags</code>. The <code>EtwpQueryTrace</code> and <code>EtwpEnableTrace</code> code paths check this flag and refuse to operate on a "secure" session unless the requesting process is Antimalware-Light. <strong>That's the entire access-control model: enable-time check skipped because there's no process; consume-time check enforced via the <code>SecurityTrace</code> flag.</strong></p>
 
@@ -988,22 +988,22 @@ ntdll!<span class="fn">EtwEventWrite</span>
       <div class="author">Connor McGarr (Origin), January 2026</div>
       <div class="year">prelude PoC published days later</div>
     </div>
-    <p class="summary">Register your own AutoLogger that subscribes to <code>Microsoft-Windows-Threat-Intelligence</code>. The kernel sets the <code>SecurityTrace</code> flag automatically because it doesn't check who configured the AutoLogger registry key &mdash; just whether the provider GUID matches. After reboot, the AutoLogger is running. Consume from it without Antimalware-Light by abusing a separate gap in the consume-side check.</p>
+    <p class="summary">Register your own AutoLogger that subscribes to <code>Microsoft-Windows-Threat-Intelligence</code>. The kernel sets the <code>SecurityTrace</code> flag automatically because it doesn't check who configured the AutoLogger registry key  just whether the provider GUID matches. After reboot, the AutoLogger is running. Consume from it without Antimalware-Light by abusing a separate gap in the consume-side check.</p>
   </div>
 
   <p>The disclosure is structured around three independent observations, each of which is an OS bug. Together they yield a working bypass.</p>
 
-  <h3>Observation 1 &mdash; AutoLogger configuration is privileged but not protected</h3>
+  <h3>Observation 1  AutoLogger configuration is privileged but not protected</h3>
 
   <p>Writing to <code>HKLM\SYSTEM\CurrentControlSet\Control\WMI\Autologger\&lt;Name&gt;</code> requires admin. <em>It does not require Antimalware-Light.</em> Any admin process can create a new AutoLogger key, populate it with the Threat-Intelligence provider GUID (<code>{F4E1897C-BB5D-5668-F1D8-040F4D8DD344}</code>), and reboot. The next boot, the kernel reads the registry, calls <code>EtwpEnableAutoLoggerProvider</code> for each provider, and (because the provider is TI) sets the <code>SecurityTrace</code> flag on the session. <em>An admin attacker has now created an ETW-TI-emitting session entirely from user mode, before any PPL driver was involved.</em></p>
 
-  <h3>Observation 2 &mdash; the consume-time check has gaps</h3>
+  <h3>Observation 2  the consume-time check has gaps</h3>
 
   <p>To consume a session marked <code>SecurityTrace</code>, the standard path requires Antimalware-Light. McGarr identified that the actual check happens in <code>EtwCheckSecurityLoggerAccess</code>, called from <code>EtwpQueryTrace</code> when the consumer queries session properties. <em>The check is for query operations; the actual real-time event flow uses a different code path</em> through <code>EtwpStartTraceFromHandle</code> and the consumer notification list. By going directly to that path with knowledge of the logger ID, a non-Antimalware-Light consumer can subscribe to events.</p>
 
-  <h3>Observation 3 &mdash; logger IDs are deterministic</h3>
+  <h3>Observation 3  logger IDs are deterministic</h3>
 
-  <p>The logger ID is needed to attach to a session via the real-time path. McGarr observed that AutoLogger logger IDs are assigned in deterministic order during boot &mdash; new AutoLoggers get the next free slot, and the slot is consistent across reboots given the same configuration. Combined with knowledge of which AutoLoggers exist, an attacker can compute the likely logger ID without admin queries to the kernel.</p>
+  <p>The logger ID is needed to attach to a session via the real-time path. McGarr observed that AutoLogger logger IDs are assigned in deterministic order during boot  new AutoLoggers get the next free slot, and the slot is consistent across reboots given the same configuration. Combined with knowledge of which AutoLoggers exist, an attacker can compute the likely logger ID without admin queries to the kernel.</p>
 
   <h3>The full attack flow</h3>
 
@@ -1044,8 +1044,8 @@ ntdll!<span class="fn">EtwEventWrite</span>
   <p>prelude's <code>github.com/preludeorg/ThreatIntelligenceConsumer</code> repository (published days after the McGarr blog) packages this as a reference implementation. It's tested and working on Windows 11 24H2 and 25H2 as of disclosure.</p>
 
   <div class="callout">
-    <div class="label">why this matters &mdash; the strategic implication</div>
-    <p>From 2014 (when the <code>SecurityTrace</code> mechanism was introduced) until January 2026, every commercial EDR vendor's threat model for ETW-TI was: "We are the only consumer because PPL Antimalware-Light gates the read side. Our detection rules can be sensitive because the attacker can't observe them." That assumption is now false. An admin attacker can read identical events to the EDR. They can profile which actions trigger which alerts, build tradecraft that avoids the watched syscalls, and update faster than the EDR vendor publishes new rules. <em>This isn't a vulnerability that gets patched in a Windows update &mdash; it's a structural redesign that requires Microsoft to add per-provider PPL checks at AutoLogger configuration time, which is a multi-month engineering effort with backwards compatibility implications.</em></p>
+    <div class="label">why this matters  the strategic implication</div>
+    <p>From 2014 (when the <code>SecurityTrace</code> mechanism was introduced) until January 2026, every commercial EDR vendor's threat model for ETW-TI was: "We are the only consumer because PPL Antimalware-Light gates the read side. Our detection rules can be sensitive because the attacker can't observe them." That assumption is now false. An admin attacker can read identical events to the EDR. They can profile which actions trigger which alerts, build tradecraft that avoids the watched syscalls, and update faster than the EDR vendor publishes new rules. <em>This isn't a vulnerability that gets patched in a Windows update  it's a structural redesign that requires Microsoft to add per-provider PPL checks at AutoLogger configuration time, which is a multi-month engineering effort with backwards compatibility implications.</em></p>
     <p>For purple team operators in 2026: this is the most significant single offensive primitive disclosed in the last 24 months. Use it (within scope) to audit which detections actually fire on which actions; the visibility you gain is the same visibility the EDR has.</p>
     <p>For detection engineers: assume your ETW-TI consumption is no longer secret. Defender for Endpoint shipped a partial mitigation in early 2026 (signature for the registry-write pattern that creates a TI-subscribed AutoLogger), but the bypass technique itself remains effective for attackers who can stage the registry write through a less-obvious channel or use one of the alternate enable methods McGarr described.</p>
   </div>
@@ -1076,20 +1076,20 @@ ntdll!<span class="fn">EtwEventWrite</span>
 
   <h3>The escalation: patching <code>NtTraceEvent</code> instead</h3>
 
-  <p>EDRs noticed the <code>EtwEventWrite</code> patch and started monitoring those bytes for tampering. The next step in the arms race was <strong>patching <code>NtTraceEvent</code></strong> &mdash; the syscall stub itself, one level down. Mr-Un1k0d3r's <code>AMSI-ETW-Patch</code> repository explicitly notes: <em>"Instead of patching <code>EtwEventWrite</code>, simply patch the syscall <code>NtTraceEvent</code> which is called by a lot of functions."</em> The advantage: a single patch site silences every ETW emission path in the process at once. The disadvantage: <code>NtTraceEvent</code> is part of the syscall surface and its bytes are equally watchable.</p>
+  <p>EDRs noticed the <code>EtwEventWrite</code> patch and started monitoring those bytes for tampering. The next step in the arms race was <strong>patching <code>NtTraceEvent</code></strong>  the syscall stub itself, one level down. Mr-Un1k0d3r's <code>AMSI-ETW-Patch</code> repository explicitly notes: <em>"Instead of patching <code>EtwEventWrite</code>, simply patch the syscall <code>NtTraceEvent</code> which is called by a lot of functions."</em> The advantage: a single patch site silences every ETW emission path in the process at once. The disadvantage: <code>NtTraceEvent</code> is part of the syscall surface and its bytes are equally watchable.</p>
 
   <h3>Patchless ETW bypasses</h3>
 
-  <p>The most evasive approach avoids byte patching entirely. SharpBlock (CCob, 2020+) implements a <strong>patchless ETW bypass</strong> by hooking <code>NtProtectVirtualMemory</code> (in the parent process, against a child) to block the EDR's own DLL from successfully completing its initialization &mdash; specifically, blocking the DLL from making its <code>VirtualProtect</code> calls during DllMain, which prevents it from setting up its hooks. The EDR's DLL technically loads but cannot install its instrumentation. Patchless because no <code>ntdll</code> bytes are modified.</p>
+  <p>The most evasive approach avoids byte patching entirely. SharpBlock (CCob, 2020+) implements a <strong>patchless ETW bypass</strong> by hooking <code>NtProtectVirtualMemory</code> (in the parent process, against a child) to block the EDR's own DLL from successfully completing its initialization  specifically, blocking the DLL from making its <code>VirtualProtect</code> calls during DllMain, which prevents it from setting up its hooks. The EDR's DLL technically loads but cannot install its instrumentation. Patchless because no <code>ntdll</code> bytes are modified.</p>
 
   <h3>Where these bypasses do and don't help</h3>
 
   <table>
     <tr><th>Bypass technique</th><th>Defeats</th><th>Doesn't defeat</th></tr>
     <tr><td>Patch <code>EtwEventWrite</code></td><td>AMSI calls, .NET runtime telemetry, application-level events</td><td>Kernel ETW-TI events, <code>Microsoft-Windows-Kernel-*</code> events</td></tr>
-    <tr><td>Patch <code>NtTraceEvent</code></td><td>All ETW emission from this process &mdash; user and kernel APIs</td><td>Other processes' events, kernel-emitted events about this process</td></tr>
+    <tr><td>Patch <code>NtTraceEvent</code></td><td>All ETW emission from this process  user and kernel APIs</td><td>Other processes' events, kernel-emitted events about this process</td></tr>
     <tr><td>SharpBlock (DLL block)</td><td>EDR's user-mode hooks &amp; ETW consumption from this process</td><td>Kernel callbacks (vol. 10), ETW-TI in EDR's own consumer</td></tr>
-    <tr><td>SecurityTrace bypass (vol. 11 § 06)</td><td>Defender's exclusive ETW-TI access &mdash; attacker can read same events</td><td>The events themselves &mdash; they still fire and still reach the EDR</td></tr>
+    <tr><td>SecurityTrace bypass (vol. 11 § 06)</td><td>Defender's exclusive ETW-TI access  attacker can read same events</td><td>The events themselves  they still fire and still reach the EDR</td></tr>
   </table>
 
   <p>The pattern: <em>user-mode ETW patching defeats user-mode-emitted events from your own process. It does not defeat kernel-emitted events about your process</em>. Every kernel callback (vol. 10) and every kernel-side ETW event (TI, Kernel-Process, Kernel-Audit-Api-Calls) fires regardless of any user-mode patching.</p>
@@ -1140,32 +1140,32 @@ ntdll!<span class="fn">EtwEventWrite</span>
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
       <div class="q">Why does ETW-TI fire regardless of how a syscall was invoked?</div>
-      <div class="a">Because the events are emitted inside the kernel implementation of the corresponding <code>Nt*</code> function. The user-mode invocation method &mdash; through hooks, direct syscall, indirect syscall, hardware breakpoint &mdash; only changes how control enters the kernel. Once inside, every path runs the same <code>Nt*</code> kernel function, which contains an <code>EtwTiLog*</code> call near its critical section. The events fire there. User-mode evasion doesn't reach them.</div>
+      <div class="a">Because the events are emitted inside the kernel implementation of the corresponding <code>Nt*</code> function. The user-mode invocation method  through hooks, direct syscall, indirect syscall, hardware breakpoint  only changes how control enters the kernel. Once inside, every path runs the same <code>Nt*</code> kernel function, which contains an <code>EtwTiLog*</code> call near its critical section. The events fire there. User-mode evasion doesn't reach them.</div>
     </div>
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
       <div class="q">Until January 2026, who could consume <code>Microsoft-Windows-Threat-Intelligence</code>?</div>
-      <div class="a">Only processes running at <code>PsProtectedSignerAntimalware-Light</code> protection level &mdash; one specific PPL tier requiring an Early-Launch-Anti-Malware (ELAM) signed driver vetted by Microsoft. Defender, CrowdStrike Falcon, SentinelOne, Elastic Defend, and Cortex XDR all run their telemetry consumer at this level. From a regular admin process, attempting to enable TI via <code>EnableTraceEx2</code> returned <code>STATUS_ACCESS_DENIED</code>. This was the single most important property making ETW-TI trustworthy as defensive ground truth.</div>
+      <div class="a">Only processes running at <code>PsProtectedSignerAntimalware-Light</code> protection level  one specific PPL tier requiring an Early-Launch-Anti-Malware (ELAM) signed driver vetted by Microsoft. Defender, CrowdStrike Falcon, SentinelOne, Elastic Defend, and Cortex XDR all run their telemetry consumer at this level. From a regular admin process, attempting to enable TI via <code>EnableTraceEx2</code> returned <code>STATUS_ACCESS_DENIED</code>. This was the single most important property making ETW-TI trustworthy as defensive ground truth.</div>
     </div>
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
       <div class="q">What is the <code>SecurityTrace</code> flag and how does it normally get set?</div>
-      <div class="a">A bit in <code>WMI_LOGGER_CONTEXT.Flags</code> that marks a session as containing privileged provider data. When set, the session can only be queried/consumed by Antimalware-Light processes &mdash; the kernel's <code>EtwCheckSecurityLoggerAccess</code> enforces this. Normally set by <code>EtwpEnableAutoLoggerProvider</code> when an AutoLogger configures <code>Microsoft-Windows-Threat-Intelligence</code> or <code>Microsoft-Windows-Kernel-Audit-Api-Calls</code> as one of its providers. Because AutoLoggers are started by the kernel itself (System process context), there's no caller-process check at enable time; the flag substitutes for that missing check.</div>
+      <div class="a">A bit in <code>WMI_LOGGER_CONTEXT.Flags</code> that marks a session as containing privileged provider data. When set, the session can only be queried/consumed by Antimalware-Light processes  the kernel's <code>EtwCheckSecurityLoggerAccess</code> enforces this. Normally set by <code>EtwpEnableAutoLoggerProvider</code> when an AutoLogger configures <code>Microsoft-Windows-Threat-Intelligence</code> or <code>Microsoft-Windows-Kernel-Audit-Api-Calls</code> as one of its providers. Because AutoLoggers are started by the kernel itself (System process context), there's no caller-process check at enable time; the flag substitutes for that missing check.</div>
     </div>
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
       <div class="q">What does Connor McGarr's January 2026 SecurityTrace bypass achieve, and what's the high-level mechanism?</div>
-      <div class="a">An admin-only attacker (no kernel driver, no ELAM, no PPL) can read <code>Microsoft-Windows-Threat-Intelligence</code> events &mdash; the same events Defender and other EDRs read. Mechanism: create a custom AutoLogger via registry write at <code>HKLM\...\WMI\Autologger\MyName</code>, add the Threat-Intelligence provider GUID as a subkey, reboot. The kernel's AutoLogger initialization sets <code>SecurityTrace</code> on the session because it sees the TI provider, but doesn't check who configured the registry. After reboot, the attacker uses a separate gap in the consume-time check (real-time path bypasses <code>EtwpQueryTrace</code>'s <code>EtwCheckSecurityLoggerAccess</code>) to attach as a consumer despite not being PPL.</div>
+      <div class="a">An admin-only attacker (no kernel driver, no ELAM, no PPL) can read <code>Microsoft-Windows-Threat-Intelligence</code> events  the same events Defender and other EDRs read. Mechanism: create a custom AutoLogger via registry write at <code>HKLM\...\WMI\Autologger\MyName</code>, add the Threat-Intelligence provider GUID as a subkey, reboot. The kernel's AutoLogger initialization sets <code>SecurityTrace</code> on the session because it sees the TI provider, but doesn't check who configured the registry. After reboot, the attacker uses a separate gap in the consume-time check (real-time path bypasses <code>EtwpQueryTrace</code>'s <code>EtwCheckSecurityLoggerAccess</code>) to attach as a consumer despite not being PPL.</div>
     </div>
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
       <div class="q">A piece of malware patches its own <code>ntdll!EtwEventWrite</code> with <code>0xC3</code>. What does this defeat, and what does it not defeat?</div>
-      <div class="a">Defeats: every ETW emission that goes through <code>EtwEventWrite</code> in this process &mdash; AMSI scan calls, .NET runtime telemetry events, PowerShell script-block logging, application-level events. Does not defeat: kernel-emitted events about this process &mdash; <code>Microsoft-Windows-Kernel-Process</code>, <code>Microsoft-Windows-Kernel-File</code>, ETW-TI. The kernel emits its events via separate code paths inside the kernel, not through user-mode <code>ntdll</code>. A typical commodity loader using only <code>EtwEventWrite</code> patching avoids AMSI alarms but still trips kernel-side detections at the syscall level.</div>
+      <div class="a">Defeats: every ETW emission that goes through <code>EtwEventWrite</code> in this process  AMSI scan calls, .NET runtime telemetry events, PowerShell script-block logging, application-level events. Does not defeat: kernel-emitted events about this process  <code>Microsoft-Windows-Kernel-Process</code>, <code>Microsoft-Windows-Kernel-File</code>, ETW-TI. The kernel emits its events via separate code paths inside the kernel, not through user-mode <code>ntdll</code>. A typical commodity loader using only <code>EtwEventWrite</code> patching avoids AMSI alarms but still trips kernel-side detections at the syscall level.</div>
     </div>
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
       <div class="q">Why is patching <code>NtTraceEvent</code> "better" than patching <code>EtwEventWrite</code> from an evasion perspective?</div>
-      <div class="a"><code>EtwEventWrite</code> is one of many user-mode wrappers that emit events; the .NET runtime, AMSI, EventLog APIs, and others have their own emission paths that don't necessarily go through it. <code>NtTraceEvent</code> is the syscall &mdash; <em>every</em> ETW emission from user mode eventually goes through it. Patching <code>NtTraceEvent</code> silences the entire user-mode ETW surface from this process in one operation. The downside: <code>NtTraceEvent</code> bytes are equally watched by the same EDR integrity-scan logic that watches <code>EtwEventWrite</code>; you've moved the patch site without making it harder to find.</div>
+      <div class="a"><code>EtwEventWrite</code> is one of many user-mode wrappers that emit events; the .NET runtime, AMSI, EventLog APIs, and others have their own emission paths that don't necessarily go through it. <code>NtTraceEvent</code> is the syscall  <em>every</em> ETW emission from user mode eventually goes through it. Patching <code>NtTraceEvent</code> silences the entire user-mode ETW surface from this process in one operation. The downside: <code>NtTraceEvent</code> bytes are equally watched by the same EDR integrity-scan logic that watches <code>EtwEventWrite</code>; you've moved the patch site without making it harder to find.</div>
     </div>
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
@@ -1180,25 +1180,25 @@ ntdll!<span class="fn">EtwEventWrite</span>
   <h2><span class="num">§ 10</span> Closing thought</h2>
   <p>Eleven volumes in. ARC III is at three-quarters:</p>
   <ul style="font-family: var(--serif); color: var(--ink); padding-left: 24px;">
-    <li style="margin-bottom: 8px;"><strong>Vol. 09</strong> &mdash; memory: where every byte that runs has been allocated.</li>
-    <li style="margin-bottom: 8px;"><strong>Vol. 10</strong> &mdash; kernel callbacks: the synchronous notification path.</li>
-    <li style="margin-bottom: 8px;"><strong>Vol. 11</strong> &mdash; ETW: the asynchronous notification path, including the most significant single offensive disclosure of the last 24 months.</li>
-    <li><strong>Vol. 12</strong> (next, closes ARC III) &mdash; PPL and BYOVD: the protection layer that gates ETW-TI consumption, the BYOVD-class attacks against it, and the 2025/2026 mitigations.</li>
+    <li style="margin-bottom: 8px;"><strong>Vol. 09</strong>  memory: where every byte that runs has been allocated.</li>
+    <li style="margin-bottom: 8px;"><strong>Vol. 10</strong>  kernel callbacks: the synchronous notification path.</li>
+    <li style="margin-bottom: 8px;"><strong>Vol. 11</strong>  ETW: the asynchronous notification path, including the most significant single offensive disclosure of the last 24 months.</li>
+    <li><strong>Vol. 12</strong> (next, closes ARC III)  PPL and BYOVD: the protection layer that gates ETW-TI consumption, the BYOVD-class attacks against it, and the 2025/2026 mitigations.</li>
   </ul>
 
   <p style="margin-top: 24px;">The two-mechanism model from vols. 10 and 11 is now complete. <em>Kernel callbacks are how the kernel actively notifies a driver. ETW is how the kernel passively publishes a stream that anyone with the right protection level can consume.</em> Both feed into the EDR; both have their own bypass families; both are what an EDR vendor's marketing means when they say "real-time visibility into kernel-level activity."</p>
 
   <p>For 2026, the practical synthesis: <em>ETW-TI was the single most important defensive primitive of the previous decade and its read-side monopoly is now broken</em>. The events still fire reliably, kernel-side, regardless of user-mode evasion. But the assumption that "only the EDR can read them" no longer holds, and detection rule design that depended on attacker invisibility needs to factor that in.</p>
 
-  <p>For purple team operators: the techniques in this volume are operationally useful. The user-mode ETW patches are baseline tradecraft. The SecurityTrace bypass is a reconnaissance primitive with no current public mitigation that fully prevents it &mdash; use it within scope to see exactly what the EDR you're up against is watching for.</p>
+  <p>For purple team operators: the techniques in this volume are operationally useful. The user-mode ETW patches are baseline tradecraft. The SecurityTrace bypass is a reconnaissance primitive with no current public mitigation that fully prevents it  use it within scope to see exactly what the EDR you're up against is watching for.</p>
 
-  <p>For detection engineers: design your rule pack as if the attacker can see your ETW-TI consumption. Sensitive alerts that depend on surprise are no longer reliably surprising. The composite-signal model from prior volumes &mdash; combining ETW-TI events with callback events with cross-process write classification with call-stack analysis &mdash; remains your competitive edge. No single signal is reliable in isolation; the combination still is.</p>
+  <p>For detection engineers: design your rule pack as if the attacker can see your ETW-TI consumption. Sensitive alerts that depend on surprise are no longer reliably surprising. The composite-signal model from prior volumes  combining ETW-TI events with callback events with cross-process write classification with call-stack analysis  remains your competitive edge. No single signal is reliable in isolation; the combination still is.</p>
 
-  <p>Next: <em class="pen">Vol. 12 &mdash; PPL &amp; BYOVD: the kernel frontier closes</em>. The Protected Process Light architecture, <code>EPROCESS->Protection</code> levels, ELAM-signed drivers, the BYOVD attack surface in 2026, the Windows Vulnerable Driver Blocklist (revisited), HVCI's role, and the VTL1 directions visible in Win 11 25H2 / Win 12 previews.</p>
+  <p>Next: <em class="pen">Vol. 12  PPL &amp; BYOVD: the kernel frontier closes</em>. The Protected Process Light architecture, <code>EPROCESS->Protection</code> levels, ELAM-signed drivers, the BYOVD attack surface in 2026, the Windows Vulnerable Driver Blocklist (revisited), HVCI's role, and the VTL1 directions visible in Win 11 25H2 / Win 12 previews.</p>
 
   <footer class="end">
     <div>filed under &middot; windows internals &middot; etw &middot; arc iii</div>
-    <div class="sig">&mdash; blacksunCUBE</div>
+    <div class="sig"> blacksunCUBE</div>
   </footer>
 
 </div>
