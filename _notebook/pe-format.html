@@ -983,7 +983,7 @@ IMAGE_SCN_MEM_EXECUTE   <span class="m">0x20000000</span>   <span class="c">// t
   <h2><span class="num">§ 06</span> Imports and exports: how DLLs find each other</h2>
   <p class="sub">If you understand nothing else at runtime, understand these two tables. They are 80% of the attack surface.</p>
 
-  <h3>The export directory  ; what a DLL offers</h3>
+  <h3>The export directory   what a DLL offers</h3>
 
   <div class="card read">
     <div class="card-head">
@@ -1008,7 +1008,7 @@ IMAGE_SCN_MEM_EXECUTE   <span class="m">0x20000000</span>   <span class="c">// t
   <p>Resolving "where is <code>NtAllocateVirtualMemory</code> inside <code>ntdll.dll</code>" reduces to: find the export directory, walk <code>AddressOfNames</code> until you hit the string, take the index, look it up in <code>AddressOfNameOrdinals</code> to get an ordinal, look <em>that</em> up in <code>AddressOfFunctions</code> to get the RVA. Add the RVA to the DLL's base address. Done. That is <code>GetProcAddress</code>, stripped of ceremony.</p>
 
   <div class="margin">
-    <code>NumberOfFunctions</code> and <code>NumberOfNames</code> differ because <em>some exports are ordinal-only</em> (no name). <code>ws2_32.dll</code> is the famous example  ; many winsock functions export by ordinal only. If you write a name-based resolver and forget this, your code silently fails to find those functions. Ask me how I know.
+    <code>NumberOfFunctions</code> and <code>NumberOfNames</code> differ because <em>some exports are ordinal-only</em> (no name). <code>ws2_32.dll</code> is the famous example   many winsock functions export by ordinal only. If you write a name-based resolver and forget this, your code silently fails to find those functions. Ask me how I know.
   </div>
 
   <h3>The import directory  ; what a DLL demands</h3>
@@ -1145,7 +1145,7 @@ IAT[]  =  { <span class="m">0x7FF8B4A21C30</span>,            <span class="m">0x
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
       <div class="q">What does <code>DllCharacteristics</code> tell you, and what's the red flag?</div>
-      <div class="a">It's a bitmask describing which process-level mitigations the binary opts into  ; <code>DYNAMIC_BASE</code> (ASLR), <code>NX_COMPAT</code> (DEP), <code>GUARD_CF</code> (CFG), <code>HIGH_ENTROPY_VA</code> (64-bit ASLR). Any modern compiled binary should have all of these set. A binary that opts out  ; particularly one missing <code>DYNAMIC_BASE</code>  ; is either ancient, deliberately weakened, or suspicious.</div>
+      <div class="a">It's a bitmask describing which process-level mitigations the binary opts into  <code>DYNAMIC_BASE</code> (ASLR), <code>NX_COMPAT</code> (DEP), <code>GUARD_CF</code> (CFG), <code>HIGH_ENTROPY_VA</code> (64-bit ASLR). Any modern compiled binary should have all of these set. A binary that opts out  ; particularly one missing <code>DYNAMIC_BASE</code>  ; is either ancient, deliberately weakened, or suspicious.</div>
     </div>
   </div>
 
@@ -1155,11 +1155,11 @@ IAT[]  =  { <span class="m">0x7FF8B4A21C30</span>,            <span class="m">0x
   <h2><span class="num">§ 09</span> Closing thought</h2>
   <p>The PE format is baroque, but it is not deep. Once you internalize the disk/memory split, the role of <code>e_lfanew</code>, and the fact that sections carry literal R/W/X flags, the rest is table-lookup. Every exotic technique you will read about  ; reflective loading, process hollowing, manual mapping, IAT hooking, module stomping, API hashing, DLL unhooking  ; is a recombination of operations on the structures we just covered. You are not learning eight separate techniques. You are learning one structure well enough that eight techniques become obvious.</p>
 
-  <p>Next in the notebook: <em class="pen">Processes &amp; Threads  ; the PEB, the TEB, and what lives inside a process after the loader is done</em>. We pick up exactly where <code>e_lfanew</code> left us: with a mapped image in memory, and a doubly-linked list of them starting to form in the PEB's Ldr structure.</p>
+  <p>Next in the notebook: <em class="pen">Processes &amp; Threads  the PEB, the TEB, and what lives inside a process after the loader is done</em>. We pick up exactly where <code>e_lfanew</code> left us: with a mapped image in memory, and a doubly-linked list of them starting to form in the PEB's Ldr structure.</p>
 
   <footer class="end">
     <div>filed under &middot; windows internals &middot; pe format &middot; offensive &amp; detection</div>
-    <div class="sig"> ; blacksunCUBE</div>
+    <div class="sig">  blacksunCUBE</div>
       </footer>
     </div>
 <script src="/assets/js/notebook-guard.js" defer></script>
