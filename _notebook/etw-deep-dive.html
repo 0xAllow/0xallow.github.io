@@ -1,0 +1,1207 @@
+---
+layout: null
+title: "ETW Deep Dive"
+volume: "11"
+entry: "01"
+order: 1101
+date: 2026-04-26
+description: "The architecture of Windows telemetry — providers, sessions, consumers, kernel-side data structures, the ETW-TI provider, AutoLoggers, the SecurityTrace flag, and the January 2026 bypass that broke a 12-year defensive assumption."
+---
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ETW Deep Dive — a field notebook</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #14161a;
+    --bg-soft: #1b1e24;
+    --bg-card: #1f232a;
+    --ink: #e8e4d8;
+    --ink-dim: #a8a396;
+    --ink-faint: #6d6a5f;
+    --rule: #2b2f38;
+
+    --read:  #5ec2e0;
+    --read-bg: rgba(94,194,224,0.10);
+    --read-border: rgba(94,194,224,0.38);
+
+    --write: #e8b64a;
+    --write-bg: rgba(232,182,74,0.10);
+    --write-border: rgba(232,182,74,0.42);
+
+    --exec:  #e8624a;
+    --exec-bg: rgba(232,98,74,0.10);
+    --exec-border: rgba(232,98,74,0.42);
+
+    --pen:   #d9456b;
+    --pen-bg: rgba(217,69,107,0.10);
+
+    --tele:  #a590d9;
+    --tele-bg: rgba(165,144,217,0.10);
+    --tele-border: rgba(165,144,217,0.40);
+
+    --mono: 'JetBrains Mono', ui-monospace, monospace;
+    --serif: 'Crimson Pro', 'Iowan Old Style', 'Palatino', serif;
+    --sans: 'Space Grotesk', system-ui, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--serif);
+    font-size: 18px;
+    line-height: 1.65;
+    background-image:
+      radial-gradient(circle at 20% 10%, rgba(94,194,224,0.04) 0%, transparent 40%),
+      radial-gradient(circle at 85% 80%, rgba(232,98,74,0.04) 0%, transparent 45%),
+      repeating-linear-gradient(0deg, transparent 0, transparent 2px, rgba(255,255,255,0.006) 2px, rgba(255,255,255,0.006) 3px);
+    min-height: 100vh;
+  }
+
+  body::before {
+    content: "";
+    position: fixed; inset: 0;
+    pointer-events: none;
+    opacity: 0.035;
+    z-index: 0;
+    background-image: url("data:image/svg+xml;utf8,<svg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  }
+
+  .wrap { max-width: 920px; margin: 0 auto; padding: 80px 32px 160px; position: relative; z-index: 1; }
+
+  .masthead {
+    border-top: 2px solid var(--ink);
+    border-bottom: 1px solid var(--rule);
+    padding: 22px 0 18px;
+    margin-bottom: 72px;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+  .masthead .brand {
+    font-family: var(--sans);
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    font-size: 12px;
+    color: var(--ink-dim);
+  }
+  .masthead .brand span { color: var(--exec); }
+  .masthead .meta {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-faint);
+    letter-spacing: 0.05em;
+  }
+
+  h1 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: clamp(42px, 6vw, 64px);
+    line-height: 1.05;
+    letter-spacing: -0.015em;
+    margin: 0 0 14px;
+    color: var(--ink);
+  }
+  h1 em { font-style: italic; color: var(--ink-dim); font-weight: 400; }
+
+  .dek {
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 21px;
+    color: var(--ink-dim);
+    max-width: 640px;
+    margin: 0 0 24px;
+    line-height: 1.45;
+  }
+  .byline {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-faint);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 80px;
+    padding-bottom: 40px;
+    border-bottom: 1px dashed var(--rule);
+  }
+  .byline em { color: var(--pen); font-style: normal; }
+
+  h2 {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 26px;
+    letter-spacing: -0.01em;
+    margin: 80px 0 6px;
+    color: var(--ink);
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+  }
+  h2 .num {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--ink-faint);
+    letter-spacing: 0.1em;
+  }
+  h2 + .sub {
+    font-family: var(--serif);
+    font-style: italic;
+    color: var(--ink-dim);
+    margin: 0 0 32px;
+    font-size: 17px;
+  }
+
+  h3 {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 17px;
+    letter-spacing: 0.01em;
+    margin: 36px 0 10px;
+    color: var(--ink);
+  }
+
+  p { margin: 0 0 18px; }
+
+  code, .kw {
+    font-family: var(--mono);
+    font-size: 0.86em;
+    background: var(--bg-soft);
+    padding: 2px 6px;
+    border-radius: 3px;
+    color: var(--ink);
+    border: 1px solid var(--rule);
+  }
+
+  strong { color: var(--ink); font-weight: 600; }
+  em.pen { color: var(--pen); font-style: italic; font-weight: 500; }
+
+  .legend {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0;
+    margin: 0 0 56px;
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    overflow: hidden;
+    background: var(--bg-card);
+  }
+  .legend-item { padding: 22px 20px; border-right: 1px solid var(--rule); }
+  .legend-item:last-child { border-right: none; }
+  .legend-item .tag {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 2px;
+  }
+  .legend-item.r .tag { background: var(--read-bg); color: var(--read); border: 1px solid var(--read-border); }
+  .legend-item.w .tag { background: var(--write-bg); color: var(--write); border: 1px solid var(--write-border); }
+  .legend-item.x .tag { background: var(--exec-bg); color: var(--exec); border: 1px solid var(--exec-border); }
+  .legend-item h4 {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 15px;
+    margin: 0 0 6px;
+    color: var(--ink);
+  }
+  .legend-item p {
+    font-family: var(--serif);
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--ink-dim);
+    margin: 0;
+  }
+  @media (max-width: 680px) {
+    .legend { grid-template-columns: 1fr; }
+    .legend-item { border-right: none; border-bottom: 1px solid var(--rule); }
+    .legend-item:last-child { border-bottom: none; }
+  }
+
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--rule);
+    border-radius: 3px;
+    padding: 24px 26px;
+    margin: 24px 0;
+  }
+  .card.read  { border-left-color: var(--read); }
+  .card.write { border-left-color: var(--write); }
+  .card.exec  { border-left-color: var(--exec); }
+
+  .card-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+  .card-head .type-name {
+    font-family: var(--mono);
+    font-weight: 700;
+    font-size: 17px;
+    color: var(--ink);
+  }
+  .tags { display: flex; gap: 6px; margin-left: auto; }
+  .pill {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    padding: 3px 8px;
+    border-radius: 2px;
+    text-transform: uppercase;
+  }
+  .pill.r { background: var(--read-bg); color: var(--read); border: 1px solid var(--read-border); }
+  .pill.w { background: var(--write-bg); color: var(--write); border: 1px solid var(--write-border); }
+  .pill.x { background: var(--exec-bg); color: var(--exec); border: 1px solid var(--exec-border); }
+
+  .gloss {
+    font-family: var(--serif);
+    font-style: italic;
+    color: var(--ink-dim);
+    font-size: 15px;
+    margin: 0 0 12px;
+  }
+
+  pre {
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.6;
+    background: #0f1116;
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    padding: 16px 18px;
+    overflow-x: auto;
+    margin: 14px 0;
+    color: #cdd1d8;
+  }
+  pre .c  { color: var(--ink-faint); font-style: italic; }
+  pre .k  { color: #b98dd0; }
+  pre .t  { color: #7dc9a9; }
+  pre .s  { color: #d8b36b; }
+  pre .n  { color: #e89069; }
+  pre .fn { color: #6db6d6; }
+  pre .m  { color: var(--pen); }
+  pre .fld { color: var(--write); }
+  pre .off { color: var(--tele); }
+
+  .hl-r { background: var(--read-bg); color: var(--read); padding: 1px 4px; border-radius: 2px; }
+  .hl-w { background: var(--write-bg); color: var(--write); padding: 1px 4px; border-radius: 2px; }
+  .hl-x { background: var(--exec-bg); color: var(--exec); padding: 1px 4px; border-radius: 2px; }
+
+  .margin {
+    border-left: 2px solid var(--pen);
+    background: var(--pen-bg);
+    padding: 14px 16px 14px 18px;
+    margin: 20px 0;
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 15px;
+    color: var(--ink);
+    line-height: 1.55;
+    position: relative;
+  }
+  .margin::before {
+    content: "margin note";
+    position: absolute;
+    top: -9px;
+    left: 14px;
+    background: var(--bg);
+    padding: 0 8px;
+    font-family: var(--mono);
+    font-size: 10px;
+    font-style: normal;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--pen);
+  }
+
+  .telemetry {
+    border: 1px solid var(--tele-border);
+    background: var(--tele-bg);
+    padding: 14px 16px 14px 18px;
+    margin: 20px 0;
+    border-radius: 3px;
+    position: relative;
+    font-family: var(--serif);
+    font-size: 14.5px;
+    line-height: 1.55;
+    color: var(--ink);
+  }
+  .telemetry::before {
+    content: "telemetry handoff";
+    position: absolute;
+    top: -9px;
+    left: 14px;
+    background: var(--bg);
+    padding: 0 8px;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--tele);
+  }
+  .telemetry strong { color: var(--tele); font-weight: 600; }
+  .telemetry code { font-size: 0.85em; }
+
+  .twin {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin: 20px 0;
+  }
+  @media (max-width: 680px) { .twin { grid-template-columns: 1fr; } }
+  .take {
+    background: var(--bg-soft);
+    border: 1px solid var(--rule);
+    padding: 16px 18px;
+    border-radius: 3px;
+  }
+  .take h5 {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    margin: 0 0 10px;
+  }
+  .take.red h5  { color: var(--exec); }
+  .take.blue h5 { color: var(--read); }
+  .take p { font-size: 14px; line-height: 1.55; margin: 0; color: var(--ink-dim); }
+  .take p strong { color: var(--ink); }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 24px 0;
+    font-size: 14px;
+  }
+  th, td {
+    text-align: left;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+  }
+  th {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+    border-bottom: 2px solid var(--ink);
+  }
+  td { font-family: var(--serif); color: var(--ink); }
+  td:first-child {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--ink);
+    width: 32%;
+  }
+
+  /* arch diagram for ETW */
+  .arch {
+    margin: 30px 0;
+    padding: 24px;
+    background: #0f1116;
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+  }
+  .arch .caption {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-bottom: 18px;
+  }
+  .arch-tier {
+    display: grid;
+    grid-template-columns: 100px 1fr;
+    gap: 14px;
+    margin-bottom: 6px;
+    align-items: stretch;
+  }
+  .arch-tier .label {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 12px 14px;
+    border-radius: 2px;
+    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .arch-tier .content {
+    background: var(--bg-card);
+    border: 1px solid var(--rule);
+    padding: 12px 14px;
+    border-radius: 2px;
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.55;
+    color: var(--ink);
+  }
+  .arch-tier.providers .label { background: var(--read-bg); color: var(--read); border: 1px solid var(--read-border); }
+  .arch-tier.providers .content { border-left: 3px solid var(--read); }
+  .arch-tier.session .label { background: var(--write-bg); color: var(--write); border: 1px solid var(--write-border); }
+  .arch-tier.session .content { border-left: 3px solid var(--write); }
+  .arch-tier.consumer .label { background: var(--exec-bg); color: var(--exec); border: 1px solid var(--exec-border); }
+  .arch-tier.consumer .content { border-left: 3px solid var(--exec); }
+  .arch-tier.controller .label { background: var(--pen-bg); color: var(--pen); border: 1px solid rgba(217,69,107,0.4); }
+  .arch-tier.controller .content { border-left: 3px solid var(--pen); }
+  .arch-arrow {
+    text-align: center;
+    color: var(--ink-faint);
+    font-size: 14px;
+    padding: 4px 0;
+    font-family: var(--mono);
+  }
+  .arch-tier .content .role {
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 13px;
+    color: var(--ink-dim);
+    display: block;
+    margin-top: 4px;
+  }
+  @media (max-width: 680px) {
+    .arch-tier { grid-template-columns: 1fr; gap: 6px; }
+    .arch-tier .label { padding: 8px; font-size: 10px; }
+  }
+
+  /* technique flow */
+  .flow {
+    margin: 28px 0;
+    padding: 24px;
+    background: #0f1116;
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+  }
+  .flow .caption {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-bottom: 18px;
+  }
+  .step {
+    display: grid;
+    grid-template-columns: 32px 1fr 1.4fr;
+    gap: 12px;
+    align-items: center;
+    padding: 10px 14px;
+    border: 1px solid var(--rule);
+    background: var(--bg-card);
+    margin-bottom: 4px;
+    border-left: 3px solid var(--ink-faint);
+  }
+  .step.r { border-left-color: var(--read); }
+  .step.w { border-left-color: var(--write); }
+  .step.x { border-left-color: var(--exec); }
+  .step.t { border-left-color: var(--tele); }
+  .step.p { border-left-color: var(--pen); }
+  .step .n {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-faint);
+    font-weight: 700;
+  }
+  .step .api {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--ink);
+  }
+  .step .role {
+    font-family: var(--serif);
+    font-style: italic;
+    color: var(--ink-dim);
+    font-size: 13.5px;
+  }
+  @media (max-width: 680px) {
+    .step { grid-template-columns: 26px 1fr; }
+    .step .role { display: none; }
+  }
+
+  /* technique block */
+  .technique {
+    background: var(--bg-card);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--rule);
+    border-radius: 3px;
+    padding: 22px 26px;
+    margin: 32px 0;
+  }
+  .technique .head {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 8px;
+  }
+  .technique .name {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 22px;
+    color: var(--ink);
+  }
+  .technique .author {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--tele);
+    letter-spacing: 0.05em;
+  }
+  .technique .year {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-faint);
+    margin-left: auto;
+  }
+  .technique .summary {
+    font-family: var(--serif);
+    font-style: italic;
+    color: var(--ink-dim);
+    font-size: 16px;
+    margin-bottom: 12px;
+  }
+  .technique.t1 { border-left-color: var(--read); }
+  .technique.t2 { border-left-color: var(--write); }
+  .technique.t3 { border-left-color: var(--exec); }
+  .technique.t4 { border-left-color: var(--pen); }
+  .technique.t5 { border-left-color: var(--tele); }
+
+  .rule {
+    border: none;
+    border-top: 1px dashed var(--rule);
+    margin: 64px 0;
+    position: relative;
+    text-align: center;
+  }
+  .rule::after {
+    content: "§";
+    position: absolute;
+    top: -14px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg);
+    padding: 0 14px;
+    color: var(--ink-faint);
+    font-family: var(--serif);
+    font-size: 20px;
+  }
+
+  .callout {
+    background: linear-gradient(180deg, var(--bg-card) 0%, var(--bg-soft) 100%);
+    border: 1px solid var(--rule);
+    border-top: 3px solid var(--pen);
+    padding: 22px 24px;
+    margin: 32px 0;
+    border-radius: 3px;
+  }
+  .callout .label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--pen);
+    margin-bottom: 8px;
+  }
+  .callout p:last-child { margin-bottom: 0; }
+
+  .deck { margin: 40px 0; }
+  .deck-title {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--pen);
+    margin-bottom: 4px;
+  }
+  .deck-sub {
+    font-family: var(--serif);
+    font-style: italic;
+    color: var(--ink-dim);
+    margin: 0 0 24px;
+    font-size: 16px;
+  }
+  .card-flip {
+    background: var(--bg-card);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    margin: 12px 0;
+    cursor: pointer;
+    transition: border-color 0.15s;
+    overflow: hidden;
+  }
+  .card-flip:hover { border-color: var(--pen); }
+  .card-flip .q {
+    padding: 18px 22px;
+    font-family: var(--serif);
+    color: var(--ink);
+    font-size: 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+  }
+  .card-flip .q::after {
+    content: "flip";
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    flex-shrink: 0;
+  }
+  .card-flip .a {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.25s ease-out, padding 0.25s ease-out;
+    padding: 0 22px;
+    font-family: var(--serif);
+    color: var(--ink-dim);
+    font-size: 15px;
+    line-height: 1.5;
+    background: var(--bg-soft);
+  }
+  .card-flip.open { border-color: var(--pen); }
+  .card-flip.open .a {
+    max-height: 700px;
+    padding: 16px 22px 18px;
+    border-top: 1px solid var(--rule);
+  }
+  .card-flip.open .q::after { content: "close"; color: var(--pen); }
+  .card-flip .a code { font-size: 0.85em; }
+
+  .end {
+    margin-top: 100px;
+    padding-top: 40px;
+    border-top: 2px solid var(--ink);
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-faint);
+    letter-spacing: 0.05em;
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .end .sig { color: var(--exec); font-weight: 700; letter-spacing: 0.15em; }
+
+  ::selection { background: var(--pen); color: var(--bg); }
+
+  /* ============== Mobile responsive patch ============== */
+  @media (max-width: 720px) {
+    body { font-size: 16px; line-height: 1.6; }
+    .wrap { padding: 48px 18px 100px; }
+    h1 { font-size: 32px !important; line-height: 1.1; }
+    .dek { font-size: 17px; }
+    h2 { font-size: 22px; flex-wrap: wrap; gap: 8px; }
+    h2 .num { font-size: 11px; }
+    h2 + .sub { font-size: 15px; }
+    h3 { font-size: 16px; }
+    .card { padding: 18px 16px; margin: 18px 0; }
+    .card-head { gap: 8px; }
+    .card-head .type-name { font-size: 16px; word-break: break-all; }
+    .tags { margin-left: 0; flex-wrap: wrap; }
+    pre {
+      font-size: 12px;
+      padding: 12px 14px;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .legend, .legend-item { padding: 16px 14px; }
+    .twin { gap: 10px; }
+    .take { padding: 14px 14px; }
+    table { font-size: 13px; }
+    th, td { padding: 8px 10px; }
+    td:first-child { width: auto; }
+    .flow, .arch { padding: 16px 14px; }
+    .step { font-size: 12px; padding: 9px 12px; gap: 8px; }
+    .technique { padding: 16px 16px; }
+    .technique .name { font-size: 18px; }
+    .end { flex-direction: column; align-items: flex-start; }
+    .masthead { padding: 16px 0 14px; margin-bottom: 48px; }
+    .masthead .brand { font-size: 11px; }
+    .byline { margin-bottom: 56px; padding-bottom: 28px; font-size: 11px; }
+  }
+
+  /* Tablet adjustments */
+  @media (min-width: 721px) and (max-width: 920px) {
+    .wrap { padding: 64px 24px 120px; }
+    h1 { font-size: clamp(36px, 6vw, 50px); }
+  }
+</style>
+</head>
+<body data-nb-protected>
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="brand">blacksun<span>CUBE</span> &nbsp;·&nbsp; field notebook</div>
+    <div class="meta">vol. 11 / entry: etw deep dive</div>
+  </header>
+
+  <h1>Event Tracing for Windows,<br><em>or: where the EDR's other half of the truth comes from.</em></h1>
+  <p class="dek">An architectural walk through providers, sessions, and consumers &mdash; the kernel-side data structures, the Threat-Intelligence provider that mature EDRs depend on, and the January 2026 disclosure that broke a 12-year defensive assumption.</p>
+  <div class="byline">blacksun<span style="color:var(--exec);">CUBE</span> field notebook &middot; vol. 11 &middot; <em>builds on vols. 05, 06, 09, 10</em></div>
+
+  <p>Vol. 10 covered kernel callbacks &mdash; the synchronous notification path. When a process is created, the kernel <em>calls</em> registered functions inside loaded drivers. Those callbacks fire in the kernel thread that's doing the work, the driver inspects, optionally modifies, and returns. The key word is synchronous.</p>
+
+  <p>This volume covers ETW &mdash; the asynchronous one. Events are written to a buffer, a separate consumer process reads them later. The kernel doesn't wait. The producer doesn't know who the consumers are. It's a publish-subscribe system glued to the side of the kernel, designed originally for performance tracing and overloaded over time into the primary security telemetry channel for Windows.</p>
+
+  <p>Both vol. 10's callbacks and this volume's ETW are observable in user space, but the architectures are different and the attacks against them are different. Callbacks run inline so removing them blinds the consumer immediately. ETW sessions are decoupled, so you can disable the consumer without the producer ever knowing. Both matter; both have their own bypass families.</p>
+
+  <p>Three things to nail down here:</p>
+
+  <ol style="font-family: var(--serif); color: var(--ink); padding-left: 24px;">
+    <li style="margin-bottom: 10px;"><strong>The four-component architecture</strong> &mdash; provider, session, controller, consumer. Drilled into Microsoft's own docs and reproduced in every blog written about ETW. Once you know what each one does, you can read any ETW disclosure in 10 seconds.</li>
+    <li style="margin-bottom: 10px;"><strong>The kernel-side data structures</strong> &mdash; <code>WMI_LOGGER_CONTEXT</code>, <code>EtwSiloState</code>, <code>EtwpLoggerContext</code> array. These are where ETW lives in kernel memory. BYOVD attackers patch fields in <code>WMI_LOGGER_CONTEXT</code> to disable specific providers. Defensive forensics tools (JPCERT's etw-scan) walk these structures to recover dropped events.</li>
+    <li><strong>The Threat-Intelligence provider</strong> and the <code>SecurityTrace</code> flag &mdash; what they're for, why ETW-TI was the gold standard for kernel telemetry from 2014 to 2025, and the January 2026 Connor McGarr disclosure that changed everything.</li>
+  </ol>
+
+  <p>Same axes:</p>
+
+  <div class="legend">
+    <div class="legend-item r">
+      <span class="tag">R &middot; Read</span>
+      <h4>Event consumption</h4>
+      <p>The consumer side. Open a trace handle, attach to a session, receive events asynchronously. PPL processes (Antimalware-Light) get expanded access to "secure" sessions; everyone else gets filtered.</p>
+    </div>
+    <div class="legend-item w">
+      <span class="tag">W &middot; Write</span>
+      <h4>Event emission</h4>
+      <p>Provider calls <code>EventWrite</code>; data goes through the user-mode ETW APIs into the kernel via <code>NtTraceEvent</code>; kernel writes into the session buffer. <em>This is the layer most user-mode bypasses target.</em></p>
+    </div>
+    <div class="legend-item x">
+      <span class="tag">X &middot; Execute</span>
+      <h4>Where filtering decisions happen</h4>
+      <p>At session-enable time (in <code>EtwEnableTrace</code> / <code>EtwpEnableAutoLoggerProvider</code>) for who can subscribe. At consume time (in <code>EtwpQueryTrace</code>) for who can introspect. The <code>SecurityTrace</code> flag governs both.</p>
+    </div>
+  </div>
+
+  <hr class="rule">
+
+  <!-- ========== § 01 ========== -->
+  <h2><span class="num">§ 01</span> The four-component architecture</h2>
+  <p class="sub">Provider, session, controller, consumer. Memorize these before reading any ETW disclosure.</p>
+
+  <p>From Microsoft's own "Instrumenting Your Code with ETW" documentation, the four components and their responsibilities:</p>
+
+  <div class="arch">
+    <div class="caption">ETW architecture &middot; data flow from producer to subscriber</div>
+    <div class="arch-tier providers">
+      <div class="label">Provider</div>
+      <div class="content">
+        Generates events. User-mode app, kernel driver, or kernel itself. Calls <code>EventWrite</code> → <code>NtTraceEvent</code>.
+        <span class="role">e.g., <code>amsi.dll</code>, <code>ntoskrnl</code>, <code>Microsoft-Windows-PowerShell</code>, <code>Microsoft-Windows-Threat-Intelligence</code></span>
+      </div>
+    </div>
+    <div class="arch-arrow">↓ events</div>
+    <div class="arch-tier session">
+      <div class="label">Session</div>
+      <div class="content">
+        Kernel object. Holds buffers. Receives events from one or more enabled providers. <code>WMI_LOGGER_CONTEXT</code> in kernel memory.
+        <span class="role">e.g., <code>EventLog-Security</code>, <code>DefenderApiLogger</code>, <code>NT Kernel Logger</code></span>
+      </div>
+    </div>
+    <div class="arch-arrow">↓ buffered</div>
+    <div class="arch-tier consumer">
+      <div class="label">Consumer</div>
+      <div class="content">
+        Application that reads events from a session, in real-time or from an <code>.etl</code> file. <code>OpenTrace</code> + <code>ProcessTrace</code>.
+        <span class="role">e.g., Event Viewer, Defender, EDR consumer service, custom WPP analyzers</span>
+      </div>
+    </div>
+    <div class="arch-tier controller">
+      <div class="label">Controller</div>
+      <div class="content">
+        Starts/stops sessions, enables/disables providers in a session. Configures everything via the registry (AutoLoggers) or programmatically (<code>StartTrace</code>, <code>EnableTraceEx2</code>).
+        <span class="role">e.g., <code>logman.exe</code>, Windows Performance Recorder, Defender's service initialization</span>
+      </div>
+    </div>
+  </div>
+
+  <p>Each component is an isolated unit of responsibility. Providers don't know who consumes their events. Consumers don't know which session they're attached to until they query. Controllers manipulate sessions externally. The decoupling is intentional: it's what allows the same provider (e.g., the kernel's process-creation events) to be consumed by Event Viewer, Defender, Sysmon, and CrowdStrike all at the same time, with different filters.</p>
+
+  <h3>How many providers and sessions are running on a typical machine</h3>
+
+  <p>From Nasreddine Bencherchali's primer (and verified on a clean Windows 11 install): <em>"Windows comes pre-installed with over 1000 registered providers and at least a dozen trace sessions."</em> Concretely:</p>
+
+  <pre><span class="c">PS C:\&gt; logman query -ets
+
+Data Collector Set Type     Status
+-------------------------------------------------------------------------------
+Circular Kernel Context Logger  Trace   Running
+Eventlog-Security               Trace   Running
+DiagLog                         Trace   Running
+Diagtrack-Listener              Trace   Running
+EventLog-Application            Trace   Running
+EventLog-System                 Trace   Running
+DefenderApiLogger               Trace   Running
+DefenderAuditLogger             Trace   Running
+...</span></pre>
+
+  <p>The <code>logman query providers</code> command lists all registered providers; on Windows 11 it returns ~1100 entries by default, growing with each installed application. Each provider has a unique GUID; each session has a name and an internal logger ID.</p>
+
+  <hr class="rule">
+
+  <!-- ========== § 02 ========== -->
+  <h2><span class="num">§ 02</span> Provider registration and event emission</h2>
+  <p class="sub">How an event makes it from a function call into the kernel buffer.</p>
+
+  <p>A provider's job is to register itself, then call <code>EventWrite</code> (or the Tracelogging variants) whenever it wants to emit an event. The actual call chain on Windows 10/11 x64:</p>
+
+  <pre><span class="c">// User-mode provider's API call:</span>
+<span class="fn">EventWrite</span>(RegHandle, &amp;EventDescriptor, UserDataCount, UserData);
+
+<span class="c">// Resolves to advapi32!EventWrite, then:</span>
+ntdll!<span class="fn">EtwEventWrite</span>
+    → ntdll!<span class="fn">EtwpEventWriteFull</span>
+        → ntdll!<span class="fn">NtTraceEvent</span>          <span class="c">// syscall transition</span>
+            → nt!<span class="fn">NtTraceEvent</span>            <span class="c">// kernel side</span>
+                → nt!<span class="fn">EtwpProcessEvent</span>     <span class="c">// dispatch into appropriate session</span>
+                    → write into <span class="fld">WMI_LOGGER_CONTEXT</span>'s buffer</pre>
+
+  <p>The user-mode chokepoints &mdash; <code>EtwEventWrite</code> at <code>ntdll!</code> and the syscall <code>NtTraceEvent</code> &mdash; are exactly what user-mode bypasses target. We'll come back to that in § 07.</p>
+
+  <h3>Where providers live</h3>
+
+  <p>A provider is identified by a GUID. Microsoft's manifest-based providers ship as <code>.man</code> XML files compiled into the binary that hosts them; the manifest tells consumers what events the provider emits and what fields they have. Modern providers use TraceLogging, which embeds the metadata directly in the binary as opaque blobs (Matt Graeber documented the format).</p>
+
+  <p>The kernel itself is a provider. The <code>NT Kernel Logger</code> session, when started, captures kernel-emitted events &mdash; process create, thread create, image load, file I/O, registry, network &mdash; via the <code>Windows Kernel Trace</code> classic provider. This is the <em>oldest</em> ETW path; modern security work uses the manifest-based providers like <code>Microsoft-Windows-Kernel-Process</code> instead, which provide finer-grained control and richer event data.</p>
+
+  <hr class="rule">
+
+  <!-- ========== § 03 ========== -->
+  <h2><span class="num">§ 03</span> Sessions and the kernel-side data structures</h2>
+  <p class="sub">Where ETW actually lives in kernel memory.</p>
+
+  <p>Every active session is represented in the kernel by a <code>WMI_LOGGER_CONTEXT</code> structure. The list of all active sessions is kept in an array. From Trail of Bits' November 2023 reverse-engineering work and corroborated by Connor McGarr's 2026 research, the path to the array on a non-isolated process is:</p>
+
+  <pre><span class="c">// Kernel debugger expression that walks to the array:</span>
+((nt!<span class="t">_ESERVERSILO_GLOBALS</span>*)&amp;nt!PspHostSiloGlobals)
+    → EtwSiloState
+        → <span class="fld">EtwpLoggerContext</span>     <span class="c">// array of WMI_LOGGER_CONTEXT pointers</span>
+        → MaxLoggers           <span class="c">// size of the array</span>
+
+<span class="c">// On Windows 11 the array size is 0x50 (80 entries).
+// Unused entries contain the value 1, not NULL.</span></pre>
+
+  <p>Each <code>WMI_LOGGER_CONTEXT</code> structure contains everything the kernel needs to dispatch events to the session: name, security descriptor, flags, buffer list, registered providers, current state. <em>The fields that matter for security analysis are <code>SecurityDescriptor</code> and <code>Flags</code></em>. The latter holds the <code>SecurityTrace</code> bit, which we'll cover in § 05&ndash;06.</p>
+
+  <h3>How forensic tools recover events</h3>
+
+  <p>JPCERT's <strong>etw-scan</strong> (a Volatility plugin published November 2024) walks the <code>EtwpLoggerContext</code> array, finds each <code>WMI_LOGGER_CONTEXT</code>, follows its <code>GlobalList</code> buffer field, and extracts events from the kernel buffer in memory. <em>Even after an attacker stops a session and deletes the <code>.etl</code> file, the buffered events may still be in kernel memory until the buffer is reused.</em> This makes ETW recovery a powerful forensic primitive.</p>
+
+  <p>For purple team operators: knowing this means an attacker who only stops the session and removes the file has <em>not</em> erased their telemetry &mdash; the buffer contents persist briefly. Live-response tooling that snapshots kernel memory captures these residual events. Properly-engineered ETW evasion has to either operate at the user-mode emission point (so events never reach the buffer) or patch the buffer itself.</p>
+
+  <hr class="rule">
+
+  <!-- ========== § 04 ========== -->
+  <h2><span class="num">§ 04</span> The Threat-Intelligence provider, revisited</h2>
+  <p class="sub">Vol. 05 introduced this. Now we open it up.</p>
+
+  <p><code>Microsoft-Windows-Threat-Intelligence</code> &mdash; ETW-TI &mdash; is a kernel-side provider that emits events on a curated list of security-sensitive operations. The events fire inside the kernel implementation of the corresponding <code>Nt*</code> function, which means they're invariant to user-mode invocation method (vol. 05). Direct syscalls don't bypass them. Hardware breakpoints don't bypass them. Hooks at <code>ntdll</code> don't bypass them. The events fire when the kernel does the work, and the kernel always does the work.</p>
+
+  <p>The set of events ETW-TI emits, current as of Windows 11 25H2:</p>
+
+  <table>
+    <tr><th>Event class</th><th>Fires when</th></tr>
+    <tr><td>ALLOCVM_LOCAL / REMOTE</td><td><code>NtAllocateVirtualMemory</code> in current vs. another process</td></tr>
+    <tr><td>PROTECTVM_LOCAL / REMOTE</td><td><code>NtProtectVirtualMemory</code> &mdash; protection changes</td></tr>
+    <tr><td>READVM_LOCAL / REMOTE</td><td><code>NtReadVirtualMemory</code> &mdash; the "LSASS read" canary</td></tr>
+    <tr><td>WRITEVM_LOCAL / REMOTE</td><td><code>NtWriteVirtualMemory</code> &mdash; cross-process writes</td></tr>
+    <tr><td>MAPVIEW_OF_SECTION</td><td><code>NtMapViewOfSection</code> &mdash; section mapping into a process</td></tr>
+    <tr><td>QUEUE_USER_APC</td><td><code>NtQueueApcThread(Ex)</code> &mdash; APC queueing across processes</td></tr>
+    <tr><td>SET_THREAD_CONTEXT</td><td><code>NtSetContextThread</code> &mdash; thread RIP redirection</td></tr>
+    <tr><td>CREATE_THREAD_EX</td><td><code>NtCreateThreadEx</code> with start address details</td></tr>
+    <tr><td>DRIVER_LOAD / IMAGE_LOAD</td><td>kernel driver / image mapping events with full context</td></tr>
+  </table>
+
+  <p>That list is a near-perfect map onto the offensive techniques covered in vols. 06&ndash;08. Every primitive used by classic injection, hollowing, doppelg&auml;nging, herpaderping, ghosting, AtomBombing, module stomping, sleep masks &mdash; <em>each one fires at least one ETW-TI event</em>. The attack model that "we'll just direct-syscall to bypass the user-mode hook" is correct for the user-mode hook and irrelevant for ETW-TI.</p>
+
+  <h3>Who is allowed to consume ETW-TI</h3>
+
+  <p>From Wavestone's EDRSandblast research and confirmed in Microsoft's documentation: <em>only processes running at <code>PsProtectedSignerAntimalware-Light</code> protection level (one specific PPL tier, requiring an Early-Launch-Anti-Malware signed driver vetted by Microsoft) can subscribe to ETW-TI</em>. Defender, CrowdStrike Falcon, SentinelOne, Elastic Defend, Cortex XDR, all run their telemetry consumer at this protection level. From a regular admin process, attempting to enable the Threat-Intelligence provider via <code>EnableTraceEx2</code> returns <code>STATUS_ACCESS_DENIED</code>.</p>
+
+  <p>This was the property that made ETW-TI <em>trustworthy</em>: a normal admin attacker, even one with kernel-mode capabilities short of a malicious PPL driver, couldn't watch what the EDR was watching. The attacker is blind to the same telemetry that's lighting up the EDR cloud. Until January 2026.</p>
+
+  <hr class="rule">
+
+  <!-- ========== § 05 ========== -->
+  <h2><span class="num">§ 05</span> AutoLoggers and the <code>SecurityTrace</code> flag</h2>
+  <p class="sub">The kernel-side mechanism that bootstraps EDR telemetry at boot.</p>
+
+  <p>An <strong>AutoLogger</strong> is a special class of trace session configured in the registry and started automatically by the kernel at boot, before any user-mode services are running. Configuration lives in:</p>
+
+  <pre>HKLM\SYSTEM\CurrentControlSet\Control\WMI\Autologger\&lt;LoggerName&gt;</pre>
+
+  <p>Each AutoLogger key contains: enable settings, buffer configuration, and a list of provider GUIDs as subkeys. Concrete real-world AutoLoggers visible on a Windows 11 machine with Defender:</p>
+
+  <ul style="font-family: var(--serif); color: var(--ink); padding-left: 24px;">
+    <li style="margin-bottom: 6px;"><code>EventLog-Security</code> &mdash; classic Windows Security Event Log feed.</li>
+    <li style="margin-bottom: 6px;"><code>DefenderApiLogger</code> &mdash; Defender's primary kernel telemetry intake.</li>
+    <li style="margin-bottom: 6px;"><code>DefenderAuditLogger</code> &mdash; Defender audit-mode telemetry.</li>
+    <li style="margin-bottom: 6px;"><code>DiagLog</code>, <code>Diagtrack-Listener</code> &mdash; OS diagnostics.</li>
+    <li><code>Circular Kernel Context Logger</code> &mdash; rolling kernel-event buffer.</li>
+  </ul>
+
+  <h3>What makes AutoLoggers special &mdash; the security implication</h3>
+
+  <p>Per Connor McGarr's January 2026 reverse-engineering of <code>EtwpEnableAutoLoggerProvider</code>: <em>AutoLogger sessions don't go through the standard <code>EnableTraceEx2</code> path</em>. They're started in the context of the System process &mdash; effectively the kernel itself &mdash; via <code>EtwpEnableAutoLoggerProvider</code>. Because the requesting "process" is the kernel, there's no Antimalware-Light check at provider-enable time; the kernel can enable any provider, including <code>Microsoft-Windows-Threat-Intelligence</code> and <code>Microsoft-Windows-Kernel-Audit-Api-Calls</code>.</p>
+
+  <p>To compensate for the missing enable-time check, the kernel sets a flag on the resulting session: the <code>SecurityTrace</code> bit in <code>WMI_LOGGER_CONTEXT.Flags</code>. The <code>EtwpQueryTrace</code> and <code>EtwpEnableTrace</code> code paths check this flag and refuse to operate on a "secure" session unless the requesting process is Antimalware-Light. <strong>That's the entire access-control model: enable-time check skipped because there's no process; consume-time check enforced via the <code>SecurityTrace</code> flag.</strong></p>
+
+  <div class="margin">
+    The <code>SecurityTrace</code> flag is automatically set by <code>EtwpEnableAutoLoggerProvider</code> when an AutoLogger configures either <code>Microsoft-Windows-Kernel-Audit-Api-Calls</code> or <code>Microsoft-Windows-Threat-Intelligence</code> as one of its providers. This is the indirect-via-AutoLogger method of getting the flag set; there's also a direct programmatic method (separate <code>EnableTraceEx2</code> call path) and an undocumented direct <code>WMI_LOGGER_INFORMATION.Flags</code> manipulation. McGarr identified all three in his disclosure.
+  </div>
+
+  <hr class="rule">
+
+  <!-- ========== § 06 ========== -->
+  <h2><span class="num">§ 06</span> The January 2026 disclosure: the SecurityTrace bypass</h2>
+  <p class="sub">A 12-year-old defensive assumption, broken by reading Microsoft's own kernel code carefully.</p>
+
+  <div class="technique t3">
+    <div class="head">
+      <div class="name">SecurityTrace AutoLogger Bypass</div>
+      <div class="author">Connor McGarr (Origin), January 2026</div>
+      <div class="year">prelude PoC published days later</div>
+    </div>
+    <p class="summary">Register your own AutoLogger that subscribes to <code>Microsoft-Windows-Threat-Intelligence</code>. The kernel sets the <code>SecurityTrace</code> flag automatically because it doesn't check who configured the AutoLogger registry key &mdash; just whether the provider GUID matches. After reboot, the AutoLogger is running. Consume from it without Antimalware-Light by abusing a separate gap in the consume-side check.</p>
+  </div>
+
+  <p>The disclosure is structured around three independent observations, each of which is an OS bug. Together they yield a working bypass.</p>
+
+  <h3>Observation 1 &mdash; AutoLogger configuration is privileged but not protected</h3>
+
+  <p>Writing to <code>HKLM\SYSTEM\CurrentControlSet\Control\WMI\Autologger\&lt;Name&gt;</code> requires admin. <em>It does not require Antimalware-Light.</em> Any admin process can create a new AutoLogger key, populate it with the Threat-Intelligence provider GUID (<code>{F4E1897C-BB5D-5668-F1D8-040F4D8DD344}</code>), and reboot. The next boot, the kernel reads the registry, calls <code>EtwpEnableAutoLoggerProvider</code> for each provider, and (because the provider is TI) sets the <code>SecurityTrace</code> flag on the session. <em>An admin attacker has now created an ETW-TI-emitting session entirely from user mode, before any PPL driver was involved.</em></p>
+
+  <h3>Observation 2 &mdash; the consume-time check has gaps</h3>
+
+  <p>To consume a session marked <code>SecurityTrace</code>, the standard path requires Antimalware-Light. McGarr identified that the actual check happens in <code>EtwCheckSecurityLoggerAccess</code>, called from <code>EtwpQueryTrace</code> when the consumer queries session properties. <em>The check is for query operations; the actual real-time event flow uses a different code path</em> through <code>EtwpStartTraceFromHandle</code> and the consumer notification list. By going directly to that path with knowledge of the logger ID, a non-Antimalware-Light consumer can subscribe to events.</p>
+
+  <h3>Observation 3 &mdash; logger IDs are deterministic</h3>
+
+  <p>The logger ID is needed to attach to a session via the real-time path. McGarr observed that AutoLogger logger IDs are assigned in deterministic order during boot &mdash; new AutoLoggers get the next free slot, and the slot is consistent across reboots given the same configuration. Combined with knowledge of which AutoLoggers exist, an attacker can compute the likely logger ID without admin queries to the kernel.</p>
+
+  <h3>The full attack flow</h3>
+
+  <div class="flow">
+    <div class="caption">SecurityTrace bypass &middot; Connor McGarr / prelude PoC, January 2026</div>
+    <div class="step w">
+      <div class="n">1</div>
+      <div class="api">reg add: HKLM\...\WMI\Autologger\MyAutoLogger</div>
+      <div class="role">create AutoLogger registry key (admin only)</div>
+    </div>
+    <div class="step w">
+      <div class="n">2</div>
+      <div class="api">add provider subkey: {F4E1897C-...} (Threat-Intelligence GUID)</div>
+      <div class="role">register TI as a provider</div>
+    </div>
+    <div class="step p">
+      <div class="n">3</div>
+      <div class="api">reboot</div>
+      <div class="role">kernel processes the registry, starts AutoLogger, sets SecurityTrace flag</div>
+    </div>
+    <div class="step r">
+      <div class="n">4</div>
+      <div class="api">determine MyAutoLogger's logger ID (deterministic from session list)</div>
+      <div class="role">find the slot in EtwpLoggerContext array</div>
+    </div>
+    <div class="step x">
+      <div class="n">5</div>
+      <div class="api">attach as real-time consumer via EtwpStartTraceFromHandle path</div>
+      <div class="role">events from TI provider arrive at the attacker's process</div>
+    </div>
+    <div class="step t">
+      <div class="n">6</div>
+      <div class="api">attacker now sees identical kernel telemetry to the EDR</div>
+      <div class="role">read the same events the EDR reads, profile detections, plan tradecraft</div>
+    </div>
+  </div>
+
+  <p>prelude's <code>github.com/preludeorg/ThreatIntelligenceConsumer</code> repository (published days after the McGarr blog) packages this as a reference implementation. It's tested and working on Windows 11 24H2 and 25H2 as of disclosure.</p>
+
+  <div class="callout">
+    <div class="label">why this matters &mdash; the strategic implication</div>
+    <p>From 2014 (when the <code>SecurityTrace</code> mechanism was introduced) until January 2026, every commercial EDR vendor's threat model for ETW-TI was: "We are the only consumer because PPL Antimalware-Light gates the read side. Our detection rules can be sensitive because the attacker can't observe them." That assumption is now false. An admin attacker can read identical events to the EDR. They can profile which actions trigger which alerts, build tradecraft that avoids the watched syscalls, and update faster than the EDR vendor publishes new rules. <em>This isn't a vulnerability that gets patched in a Windows update &mdash; it's a structural redesign that requires Microsoft to add per-provider PPL checks at AutoLogger configuration time, which is a multi-month engineering effort with backwards compatibility implications.</em></p>
+    <p>For purple team operators in 2026: this is the most significant single offensive primitive disclosed in the last 24 months. Use it (within scope) to audit which detections actually fire on which actions; the visibility you gain is the same visibility the EDR has.</p>
+    <p>For detection engineers: assume your ETW-TI consumption is no longer secret. Defender for Endpoint shipped a partial mitigation in early 2026 (signature for the registry-write pattern that creates a TI-subscribed AutoLogger), but the bypass technique itself remains effective for attackers who can stage the registry write through a less-obvious channel or use one of the alternate enable methods McGarr described.</p>
+  </div>
+
+  <hr class="rule">
+
+  <!-- ========== § 07 ========== -->
+  <h2><span class="num">§ 07</span> User-mode ETW patching: the cheap, ubiquitous bypass</h2>
+  <p class="sub">A separate problem from kernel ETW-TI. Affects user-mode emission, not kernel-side events.</p>
+
+  <p>Long before ETW-TI mattered, malware authors discovered that ETW emission in user mode goes through specific functions in <code>ntdll</code>: <code>EtwEventWrite</code> and <code>EtwEventWriteFull</code>. Both eventually call the syscall <code>NtTraceEvent</code>. <em>Patching any of these in your own process disables ETW for that process</em>. The kernel still fires its own events for kernel-side operations, but anything the application reports about itself (PowerShell script execution, .NET method calls, AMSI scans) is silenced.</p>
+
+  <p>The canonical patch: overwrite the first few bytes of <code>EtwEventWrite</code> with an instant return.</p>
+
+  <pre><span class="c">// x64 patch (single byte): jump in, immediately return.</span>
+   <span class="hl-x">0xC3</span>            <span class="c">; ret</span>
+
+<span class="c">// Common variants seen in samples:</span>
+   0xC3                            <span class="c">; bare ret (Mr-Un1k0d3r style)</span>
+   0x48 0x33 0xC0 0xC3              <span class="c">; xor rax,rax; ret  (return success)</span>
+   0xC2 0x14 0x00                  <span class="c">; ret 0x14  (cleanup stack on return)</span>
+
+<span class="c">// x86 patch:</span>
+   0x33 0xC0 0xC2 0x14 0x00         <span class="c">; xor eax,eax; ret 0x14</span>
+   0xB8 0xFF 0x55                   <span class="c">; mov eax, 0x000055FF (return-style stub)</span></pre>
+
+  <p>The Turla backdoor (analyzed February 2025), Remcos RAT (February 2025), and dozens of commodity loaders all patch <code>EtwEventWrite</code> in their own process this way. It's a one-line evasion that defeats the AMSI-driven and .NET-driven detection categories. White Knight Labs's <em>"Bypassing ETW for Fun and Profit"</em> (referenced in 2025) documents the technique.</p>
+
+  <h3>The escalation: patching <code>NtTraceEvent</code> instead</h3>
+
+  <p>EDRs noticed the <code>EtwEventWrite</code> patch and started monitoring those bytes for tampering. The next step in the arms race was <strong>patching <code>NtTraceEvent</code></strong> &mdash; the syscall stub itself, one level down. Mr-Un1k0d3r's <code>AMSI-ETW-Patch</code> repository explicitly notes: <em>"Instead of patching <code>EtwEventWrite</code>, simply patch the syscall <code>NtTraceEvent</code> which is called by a lot of functions."</em> The advantage: a single patch site silences every ETW emission path in the process at once. The disadvantage: <code>NtTraceEvent</code> is part of the syscall surface and its bytes are equally watchable.</p>
+
+  <h3>Patchless ETW bypasses</h3>
+
+  <p>The most evasive approach avoids byte patching entirely. SharpBlock (CCob, 2020+) implements a <strong>patchless ETW bypass</strong> by hooking <code>NtProtectVirtualMemory</code> (in the parent process, against a child) to block the EDR's own DLL from successfully completing its initialization &mdash; specifically, blocking the DLL from making its <code>VirtualProtect</code> calls during DllMain, which prevents it from setting up its hooks. The EDR's DLL technically loads but cannot install its instrumentation. Patchless because no <code>ntdll</code> bytes are modified.</p>
+
+  <h3>Where these bypasses do and don't help</h3>
+
+  <table>
+    <tr><th>Bypass technique</th><th>Defeats</th><th>Doesn't defeat</th></tr>
+    <tr><td>Patch <code>EtwEventWrite</code></td><td>AMSI calls, .NET runtime telemetry, application-level events</td><td>Kernel ETW-TI events, <code>Microsoft-Windows-Kernel-*</code> events</td></tr>
+    <tr><td>Patch <code>NtTraceEvent</code></td><td>All ETW emission from this process &mdash; user and kernel APIs</td><td>Other processes' events, kernel-emitted events about this process</td></tr>
+    <tr><td>SharpBlock (DLL block)</td><td>EDR's user-mode hooks &amp; ETW consumption from this process</td><td>Kernel callbacks (vol. 10), ETW-TI in EDR's own consumer</td></tr>
+    <tr><td>SecurityTrace bypass (vol. 11 § 06)</td><td>Defender's exclusive ETW-TI access &mdash; attacker can read same events</td><td>The events themselves &mdash; they still fire and still reach the EDR</td></tr>
+  </table>
+
+  <p>The pattern: <em>user-mode ETW patching defeats user-mode-emitted events from your own process. It does not defeat kernel-emitted events about your process</em>. Every kernel callback (vol. 10) and every kernel-side ETW event (TI, Kernel-Process, Kernel-Audit-Api-Calls) fires regardless of any user-mode patching.</p>
+
+  <hr class="rule">
+
+  <!-- ========== § 08 ========== -->
+  <h2><span class="num">§ 08</span> Detection chokepoints in 2026</h2>
+  <p class="sub">Five signals that catch ETW-tampering, ordered by reliability.</p>
+
+  <div class="twin">
+    <div class="take blue">
+      <h5>1 &middot; <code>EtwEventWrite</code> integrity scan</h5>
+      <p>Periodic check of the first ~10 bytes of <code>ntdll!EtwEventWrite</code> against the on-disk image. Catches every commodity ETW patcher in one query. Defender for Endpoint runs this; Elastic Defend runs this. False positive rate: zero. Defeated by: <code>NtTraceEvent</code> patching (one level down) or patchless bypasses.</p>
+    </div>
+    <div class="take blue">
+      <h5>2 &middot; AutoLogger registry monitoring</h5>
+      <p>Watch for <code>HKLM\...\WMI\Autologger\</code> writes via the Cm registry callback (vol. 10). Specifically alert on writes that add the Threat-Intelligence GUID to a non-Microsoft-managed AutoLogger. Direct counter to the SecurityTrace bypass. Defender added this signature in early 2026 per the McGarr disclosure followup.</p>
+    </div>
+    <div class="take blue">
+      <h5>3 &middot; ETW session enumeration anomaly</h5>
+      <p>Periodically enumerate active sessions via <code>logman query</code> or the equivalent ETW API. Alert on new sessions consuming privileged providers (TI, Kernel-Audit-Api-Calls) that aren't in a known whitelist. Catches the bypassed SecurityTrace consumer once it's running. Lower-priority alert; prone to false positives during legitimate driver installs.</p>
+    </div>
+    <div class="take blue">
+      <h5>4 &middot; <code>WMI_LOGGER_CONTEXT.Flags</code> kernel scan</h5>
+      <p>Forensic and IR-tier: kernel-mode scan of all active sessions for <code>SecurityTrace</code>-flagged sessions whose configuration was added recently. JPCERT's <code>etw-scan</code> Volatility plugin can do this offline. Production EDRs typically don't run continuous kernel-memory scans for this; it's a hunt-time signal.</p>
+    </div>
+    <div class="take blue">
+      <h5>5 &middot; ProviderEnableInfo patching detection</h5>
+      <p>EDRSandblast and similar BYOVD tools disable ETW-TI by patching the provider's <code>ProviderEnableInfo</code> field in kernel memory. Detection requires periodic kernel-memory checksumming of the TI provider's registration structure, which EDRs typically do as part of their tamper-protection. Combined with the WDB (vol. 10) raises BYOVD cost.</p>
+    </div>
+  </div>
+
+  <p>Note across the five: the first is user-mode (cheap, broad), the next three target specific bypasses, and the last is the kernel BYOVD chokepoint. <em>No single signal catches everything; composite scoring across all five is the production model</em>.</p>
+
+  <hr class="rule">
+
+  <!-- ========== § 09 ========== -->
+  <div class="deck">
+    <div class="deck-title">§ 09 &nbsp;·&nbsp; the 30-second recall</div>
+    <h2 style="margin-top: 6px;">Flashcards</h2>
+    <p class="deck-sub">Eight questions. If you can answer all without notes, you understand the second half of EDR's ground truth.</p>
+
+    <div class="card-flip" onclick="this.classList.toggle('open')">
+      <div class="q">Name the four ETW components and their responsibilities.</div>
+      <div class="a"><strong>Provider</strong>: generates events (e.g., <code>amsi.dll</code>, <code>ntoskrnl</code>, the TI provider). <strong>Session</strong>: kernel object that holds buffers; receives events from one or more enabled providers (<code>WMI_LOGGER_CONTEXT</code> in kernel memory). <strong>Consumer</strong>: application that reads events from a session in real-time or from an .etl file (e.g., Event Viewer, EDR consumer service). <strong>Controller</strong>: starts/stops sessions, enables/disables providers in a session (e.g., <code>logman</code>, Windows Performance Recorder, the kernel itself for AutoLoggers).</div>
+    </div>
+
+    <div class="card-flip" onclick="this.classList.toggle('open')">
+      <div class="q">Why does ETW-TI fire regardless of how a syscall was invoked?</div>
+      <div class="a">Because the events are emitted inside the kernel implementation of the corresponding <code>Nt*</code> function. The user-mode invocation method &mdash; through hooks, direct syscall, indirect syscall, hardware breakpoint &mdash; only changes how control enters the kernel. Once inside, every path runs the same <code>Nt*</code> kernel function, which contains an <code>EtwTiLog*</code> call near its critical section. The events fire there. User-mode evasion doesn't reach them.</div>
+    </div>
+
+    <div class="card-flip" onclick="this.classList.toggle('open')">
+      <div class="q">Until January 2026, who could consume <code>Microsoft-Windows-Threat-Intelligence</code>?</div>
+      <div class="a">Only processes running at <code>PsProtectedSignerAntimalware-Light</code> protection level &mdash; one specific PPL tier requiring an Early-Launch-Anti-Malware (ELAM) signed driver vetted by Microsoft. Defender, CrowdStrike Falcon, SentinelOne, Elastic Defend, and Cortex XDR all run their telemetry consumer at this level. From a regular admin process, attempting to enable TI via <code>EnableTraceEx2</code> returned <code>STATUS_ACCESS_DENIED</code>. This was the single most important property making ETW-TI trustworthy as defensive ground truth.</div>
+    </div>
+
+    <div class="card-flip" onclick="this.classList.toggle('open')">
+      <div class="q">What is the <code>SecurityTrace</code> flag and how does it normally get set?</div>
+      <div class="a">A bit in <code>WMI_LOGGER_CONTEXT.Flags</code> that marks a session as containing privileged provider data. When set, the session can only be queried/consumed by Antimalware-Light processes &mdash; the kernel's <code>EtwCheckSecurityLoggerAccess</code> enforces this. Normally set by <code>EtwpEnableAutoLoggerProvider</code> when an AutoLogger configures <code>Microsoft-Windows-Threat-Intelligence</code> or <code>Microsoft-Windows-Kernel-Audit-Api-Calls</code> as one of its providers. Because AutoLoggers are started by the kernel itself (System process context), there's no caller-process check at enable time; the flag substitutes for that missing check.</div>
+    </div>
+
+    <div class="card-flip" onclick="this.classList.toggle('open')">
+      <div class="q">What does Connor McGarr's January 2026 SecurityTrace bypass achieve, and what's the high-level mechanism?</div>
+      <div class="a">An admin-only attacker (no kernel driver, no ELAM, no PPL) can read <code>Microsoft-Windows-Threat-Intelligence</code> events &mdash; the same events Defender and other EDRs read. Mechanism: create a custom AutoLogger via registry write at <code>HKLM\...\WMI\Autologger\MyName</code>, add the Threat-Intelligence provider GUID as a subkey, reboot. The kernel's AutoLogger initialization sets <code>SecurityTrace</code> on the session because it sees the TI provider, but doesn't check who configured the registry. After reboot, the attacker uses a separate gap in the consume-time check (real-time path bypasses <code>EtwpQueryTrace</code>'s <code>EtwCheckSecurityLoggerAccess</code>) to attach as a consumer despite not being PPL.</div>
+    </div>
+
+    <div class="card-flip" onclick="this.classList.toggle('open')">
+      <div class="q">A piece of malware patches its own <code>ntdll!EtwEventWrite</code> with <code>0xC3</code>. What does this defeat, and what does it not defeat?</div>
+      <div class="a">Defeats: every ETW emission that goes through <code>EtwEventWrite</code> in this process &mdash; AMSI scan calls, .NET runtime telemetry events, PowerShell script-block logging, application-level events. Does not defeat: kernel-emitted events about this process &mdash; <code>Microsoft-Windows-Kernel-Process</code>, <code>Microsoft-Windows-Kernel-File</code>, ETW-TI. The kernel emits its events via separate code paths inside the kernel, not through user-mode <code>ntdll</code>. A typical commodity loader using only <code>EtwEventWrite</code> patching avoids AMSI alarms but still trips kernel-side detections at the syscall level.</div>
+    </div>
+
+    <div class="card-flip" onclick="this.classList.toggle('open')">
+      <div class="q">Why is patching <code>NtTraceEvent</code> "better" than patching <code>EtwEventWrite</code> from an evasion perspective?</div>
+      <div class="a"><code>EtwEventWrite</code> is one of many user-mode wrappers that emit events; the .NET runtime, AMSI, EventLog APIs, and others have their own emission paths that don't necessarily go through it. <code>NtTraceEvent</code> is the syscall &mdash; <em>every</em> ETW emission from user mode eventually goes through it. Patching <code>NtTraceEvent</code> silences the entire user-mode ETW surface from this process in one operation. The downside: <code>NtTraceEvent</code> bytes are equally watched by the same EDR integrity-scan logic that watches <code>EtwEventWrite</code>; you've moved the patch site without making it harder to find.</div>
+    </div>
+
+    <div class="card-flip" onclick="this.classList.toggle('open')">
+      <div class="q">An attacker stops an ETW session and deletes the .etl file. Are the events recoverable?</div>
+      <div class="a">Often yes. <em>Buffered events remain in kernel memory until the buffer is reused.</em> JPCERT's etw-scan Volatility plugin (Nov 2024) walks the <code>EtwpLoggerContext</code> array, finds <code>WMI_LOGGER_CONTEXT</code> entries (including stopped ones with not-yet-freed buffers), and extracts the events from the GlobalList buffer field. Forensic capture of a memory image during or shortly after the incident often recovers the deleted telemetry. For an attacker, properly silencing ETW means either patching the user-mode emission point so events never reach the buffer, or zeroing the buffer in kernel memory directly via BYOVD.</div>
+    </div>
+  </div>
+
+  <hr class="rule">
+
+  <!-- ========== § 10 ========== -->
+  <h2><span class="num">§ 10</span> Closing thought</h2>
+  <p>Eleven volumes in. ARC III is at three-quarters:</p>
+  <ul style="font-family: var(--serif); color: var(--ink); padding-left: 24px;">
+    <li style="margin-bottom: 8px;"><strong>Vol. 09</strong> &mdash; memory: where every byte that runs has been allocated.</li>
+    <li style="margin-bottom: 8px;"><strong>Vol. 10</strong> &mdash; kernel callbacks: the synchronous notification path.</li>
+    <li style="margin-bottom: 8px;"><strong>Vol. 11</strong> &mdash; ETW: the asynchronous notification path, including the most significant single offensive disclosure of the last 24 months.</li>
+    <li><strong>Vol. 12</strong> (next, closes ARC III) &mdash; PPL and BYOVD: the protection layer that gates ETW-TI consumption, the BYOVD-class attacks against it, and the 2025/2026 mitigations.</li>
+  </ul>
+
+  <p style="margin-top: 24px;">The two-mechanism model from vols. 10 and 11 is now complete. <em>Kernel callbacks are how the kernel actively notifies a driver. ETW is how the kernel passively publishes a stream that anyone with the right protection level can consume.</em> Both feed into the EDR; both have their own bypass families; both are what an EDR vendor's marketing means when they say "real-time visibility into kernel-level activity."</p>
+
+  <p>For 2026, the practical synthesis: <em>ETW-TI was the single most important defensive primitive of the previous decade and its read-side monopoly is now broken</em>. The events still fire reliably, kernel-side, regardless of user-mode evasion. But the assumption that "only the EDR can read them" no longer holds, and detection rule design that depended on attacker invisibility needs to factor that in.</p>
+
+  <p>For purple team operators: the techniques in this volume are operationally useful. The user-mode ETW patches are baseline tradecraft. The SecurityTrace bypass is a reconnaissance primitive with no current public mitigation that fully prevents it &mdash; use it within scope to see exactly what the EDR you're up against is watching for.</p>
+
+  <p>For detection engineers: design your rule pack as if the attacker can see your ETW-TI consumption. Sensitive alerts that depend on surprise are no longer reliably surprising. The composite-signal model from prior volumes &mdash; combining ETW-TI events with callback events with cross-process write classification with call-stack analysis &mdash; remains your competitive edge. No single signal is reliable in isolation; the combination still is.</p>
+
+  <p>Next: <em class="pen">Vol. 12 &mdash; PPL &amp; BYOVD: the kernel frontier closes</em>. The Protected Process Light architecture, <code>EPROCESS->Protection</code> levels, ELAM-signed drivers, the BYOVD attack surface in 2026, the Windows Vulnerable Driver Blocklist (revisited), HVCI's role, and the VTL1 directions visible in Win 11 25H2 / Win 12 previews.</p>
+
+  <footer class="end">
+    <div>filed under &middot; windows internals &middot; etw &middot; arc iii</div>
+    <div class="sig">&mdash; blacksunCUBE</div>
+  </footer>
+
+</div>
+<script src="/assets/js/notebook-guard.js" defer></script>
+</body>
+</html>
