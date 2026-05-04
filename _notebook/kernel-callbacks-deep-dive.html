@@ -767,19 +767,19 @@ description: "How the Windows kernel notifies EDR drivers about process, thread,
   </header>
 
   <h1>Kernel Callbacks,<br><em>or: the function pointers an EDR's existence depends on.</em></h1>
-  <p class="dek">A walk through every notification the Windows kernel offers a security driver &mdash; process, thread, image, handle, registry, file &mdash; the data structures they live in, and the BYOVD-class attacks that target those data structures directly.</p>
+  <p class="dek">A walk through every notification the Windows kernel offers a security driver  process, thread, image, handle, registry, file  the data structures they live in, and the BYOVD-class attacks that target those data structures directly.</p>
   <div class="byline">blacksun<span style="color:var(--exec);">CUBE</span> field notebook &middot; vol. 10 &middot; <em>builds on every prior volume; this is where the EDR really lives</em></div>
 
   <p>Every previous volume has been a piece of a puzzle from the offensive side: how does an attacker run code, hide from telemetry, evade hooks. This volume is the <em>defender's</em> primary tool. When an EDR product says it "monitors process creation" or "watches for credential dumping" or "detects DLL injection", what it almost always means in practice is <em>"my driver registered a callback for this kernel event, and I'm reading the data the kernel hands me."</em></p>
 
-  <p>That's not a metaphor. The Windows kernel exposes a small, well-defined set of callback registration APIs. Every commercial EDR (Defender for Endpoint, CrowdStrike Falcon, SentinelOne, Elastic Defend, Cortex XDR) uses essentially the same set. The differences between products are in <em>what</em> they do with the events &mdash; cloud correlation, behavioral scoring, response automation &mdash; not in <em>where</em> they get the data. The data sources are documented and finite.</p>
+  <p>That's not a metaphor. The Windows kernel exposes a small, well-defined set of callback registration APIs. Every commercial EDR (Defender for Endpoint, CrowdStrike Falcon, SentinelOne, Elastic Defend, Cortex XDR) uses essentially the same set. The differences between products are in <em>what</em> they do with the events  cloud correlation, behavioral scoring, response automation  not in <em>where</em> they get the data. The data sources are documented and finite.</p>
 
   <p>Three things in this volume:</p>
 
   <ol style="font-family: var(--serif); color: var(--ink); padding-left: 24px;">
-    <li style="margin-bottom: 10px;"><strong>The callback registration APIs</strong> &mdash; <code>PsSetCreate*NotifyRoutine*</code>, <code>ObRegisterCallbacks</code>, <code>CmRegisterCallbackEx</code>, minifilter registration, WFP callouts. Each one notifies a driver about a specific class of event, and each one has a maximum number of registrants and a kernel-side data structure storing the registrations.</li>
+    <li style="margin-bottom: 10px;"><strong>The callback registration APIs</strong>  <code>PsSetCreate*NotifyRoutine*</code>, <code>ObRegisterCallbacks</code>, <code>CmRegisterCallbackEx</code>, minifilter registration, WFP callouts. Each one notifies a driver about a specific class of event, and each one has a maximum number of registrants and a kernel-side data structure storing the registrations.</li>
     <li style="margin-bottom: 10px;"><strong>The kernel data structures</strong> behind those registrations. <code>PspCreateProcessNotifyRoutine</code> is an array. <code>OBJECT_TYPE.CallbackList</code> is a doubly-linked list. Knowing the layout matters because BYOVD attacks <em>directly modify these structures</em> from kernel-mode arbitrary-write primitives.</li>
-    <li><strong>The BYOVD attack family</strong> &mdash; once the attacker has kernel-mode write (via a vulnerable signed driver), what do they actually do? They walk these structures, identify EDR-registered callbacks by associated driver name, and zero out the entries. EDRSandblast is the canonical implementation; we'll walk through what it does.</li>
+    <li><strong>The BYOVD attack family</strong>  once the attacker has kernel-mode write (via a vulnerable signed driver), what do they actually do? They walk these structures, identify EDR-registered callbacks by associated driver name, and zero out the entries. EDRSandblast is the canonical implementation; we'll walk through what it does.</li>
   </ol>
 
   <p>Same axes:</p>
@@ -920,12 +920,12 @@ description: "How the Windows kernel notifies EDR drivers about process, thread,
     </div>
   </div>
 
-  <p>Each entry is not a raw pointer &mdash; the low 3 bits are flag bits (used to differentiate <code>Ex</code> vs non-<code>Ex</code> registrations and similar metadata). To get the actual function address you AND with <code>0xFFFFFFFFFFFFFFF8</code>. This is documented in EDRSandblast's source and in multiple research blogs.</p>
+  <p>Each entry is not a raw pointer  the low 3 bits are flag bits (used to differentiate <code>Ex</code> vs non-<code>Ex</code> registrations and similar metadata). To get the actual function address you AND with <code>0xFFFFFFFFFFFFFFF8</code>. This is documented in EDRSandblast's source and in multiple research blogs.</p>
 
   <p>The dispatcher function: <code>nt!PspCallProcessNotifyRoutines</code>. It walks the array, ANDs with the mask, and calls each non-null function.</p>
 
   <div class="margin">
-    EDRSandblast's "audit" mode dumps this exact array with symbolic resolution. Running it on a clean Windows 10/11 install with Defender enabled produces an output like the one above &mdash; you can <em>see</em> which kernel modules are watching process creation. This is the audit any defender should run when evaluating an EDR product: are the callbacks actually registered? Some lighter products advertise process monitoring but never show up in this array because they rely on user-mode hooks alone.
+    EDRSandblast's "audit" mode dumps this exact array with symbolic resolution. Running it on a clean Windows 10/11 install with Defender enabled produces an output like the one above  you can <em>see</em> which kernel modules are watching process creation. This is the audit any defender should run when evaluating an EDR product: are the callbacks actually registered? Some lighter products advertise process monitoring but never show up in this array because they rely on user-mode hooks alone.
   </div>
 
   <hr class="rule">
@@ -949,7 +949,7 @@ description: "How the Windows kernel notifies EDR drivers about process, thread,
     [<span class="k">in</span>] <span class="t">BOOLEAN</span> Create
 );</pre>
 
-  <p>Fires every time a thread is created or destroyed across the system. The callback receives source PID + TID + create/destroy flag. Thread creation events are extremely high-volume on a busy system &mdash; legitimate processes create and destroy threads constantly, so this callback alone produces low-fidelity signal. Combined with thread <em>start address</em> (available on the Ex variant), it becomes useful: a thread starting at an address in <code>MEM_PRIVATE</code> RWX memory is a strong injection signal.</p>
+  <p>Fires every time a thread is created or destroyed across the system. The callback receives source PID + TID + create/destroy flag. Thread creation events are extremely high-volume on a busy system  legitimate processes create and destroy threads constantly, so this callback alone produces low-fidelity signal. Combined with thread <em>start address</em> (available on the Ex variant), it becomes useful: a thread starting at an address in <code>MEM_PRIVATE</code> RWX memory is a strong injection signal.</p>
 
   <p>Stored in <code>nt!PspCreateThreadNotifyRoutine</code> array, dispatched via <code>nt!PspCallThreadNotifyRoutines</code>. Same 64-callback limit, same low-3-bits-as-flags layout.</p>
 
@@ -970,7 +970,7 @@ description: "How the Windows kernel notifies EDR drivers about process, thread,
 
   <div class="callout">
     <div class="label">a documented bug worth knowing about</div>
-    <p>FortiGuard Labs (formerly enSilo) disclosed in 2017 that <code>FullImageName</code> passed to load-image callbacks is sometimes invalid &mdash; specifically, the <code>FILE_OBJECT.FileName</code> buffer can be overwritten by NTFS rename operations between when the image is mapped and when the callback fires. A malicious actor can deliberately exploit this by mapping their image, then renaming the underlying file, causing the callback to receive an outdated path. The bug exists in every Windows version from 2000 through (verified) Win 10 Anniversary; defenders have to use alternative APIs like <code>FltGetFileNameInformationUnsafe</code> within the callback to get an authoritative path. <em>If your detection logic trusts <code>FullImageName</code> blindly, it can be tricked.</em></p>
+    <p>FortiGuard Labs (formerly enSilo) disclosed in 2017 that <code>FullImageName</code> passed to load-image callbacks is sometimes invalid  specifically, the <code>FILE_OBJECT.FileName</code> buffer can be overwritten by NTFS rename operations between when the image is mapped and when the callback fires. A malicious actor can deliberately exploit this by mapping their image, then renaming the underlying file, causing the callback to receive an outdated path. The bug exists in every Windows version from 2000 through (verified) Win 10 Anniversary; defenders have to use alternative APIs like <code>FltGetFileNameInformationUnsafe</code> within the callback to get an authoritative path. <em>If your detection logic trusts <code>FullImageName</code> blindly, it can be tricked.</em></p>
   </div>
 
   <h3>Image-load limit history</h3>
@@ -980,7 +980,7 @@ description: "How the Windows kernel notifies EDR drivers about process, thread,
   <hr class="rule">
 
   <!-- ========== § 04 ========== -->
-  <h2><span class="num">§ 04</span> Object callbacks &mdash; <code>ObRegisterCallbacks</code></h2>
+  <h2><span class="num">§ 04</span> Object callbacks  <code>ObRegisterCallbacks</code></h2>
   <p class="sub">Filter handle creation and duplication. The mechanism that lets EDRs intercept LSASS access.</p>
 
   <div class="technique t1">
@@ -1016,7 +1016,7 @@ description: "How the Windows kernel notifies EDR drivers about process, thread,
 
   <h3>What the pre-operation callback can do</h3>
 
-  <p>Per Microsoft Learn (and confirmed by Jonathan Johnson's reverse-engineering of <code>ObpPreInterceptHandleCreate</code>): <em>pre-operation callbacks cannot outright deny a handle. They can only modify the requested access rights.</em> If a process requests <code>PROCESS_ALL_ACCESS</code> on LSASS and the EDR's pre-callback strips everything except <code>PROCESS_QUERY_LIMITED_INFORMATION</code>, the calling process gets a handle &mdash; but a useless one. The handle creation succeeds; the access rights granted are reduced.</p>
+  <p>Per Microsoft Learn (and confirmed by Jonathan Johnson's reverse-engineering of <code>ObpPreInterceptHandleCreate</code>): <em>pre-operation callbacks cannot outright deny a handle. They can only modify the requested access rights.</em> If a process requests <code>PROCESS_ALL_ACCESS</code> on LSASS and the EDR's pre-callback strips everything except <code>PROCESS_QUERY_LIMITED_INFORMATION</code>, the calling process gets a handle  but a useless one. The handle creation succeeds; the access rights granted are reduced.</p>
 
   <pre><span class="t">OB_PREOP_CALLBACK_STATUS</span> <span class="fn">PreOperationCallback</span>(
     PVOID                          RegistrationContext,
@@ -1037,14 +1037,14 @@ description: "How the Windows kernel notifies EDR drivers about process, thread,
 
   <h3>The kernel-side structure</h3>
 
-  <p>Object callbacks live in a different structure than process/thread/image callbacks. Each kernel <strong>object type</strong> &mdash; <code>PsProcessType</code>, <code>PsThreadType</code>, etc. &mdash; has an <code>OBJECT_TYPE</code> structure in kernel memory. The last field of this structure is <code>CallbackList</code>, a <code>LIST_ENTRY</code> (doubly-linked list) of <code>CALLBACK_ENTRY_ITEM</code> structures.</p>
+  <p>Object callbacks live in a different structure than process/thread/image callbacks. Each kernel <strong>object type</strong>  <code>PsProcessType</code>, <code>PsThreadType</code>, etc.  has an <code>OBJECT_TYPE</code> structure in kernel memory. The last field of this structure is <code>CallbackList</code>, a <code>LIST_ENTRY</code> (doubly-linked list) of <code>CALLBACK_ENTRY_ITEM</code> structures.</p>
 
   <p>When <code>ObRegisterCallbacks</code> is called, the kernel walks the target object type's <code>CallbackList</code>, finds the right altitude position (per the altitude string the driver supplied), and inserts a new entry. <em>Two drivers cannot register at the same altitude</em>; that's why each EDR vendor publishes its own assigned altitude range.</p>
 
-  <p>When a handle creation or duplication happens, <code>nt!ObpPreInterceptHandleCreate</code> walks the same <code>CallbackList</code> and calls every registered pre-operation callback. <code>ObpPostInterceptHandleCreate</code> does the same for post-operation. <strong>This walk happens after the Security Reference Monitor's access check has already approved the operation</strong> &mdash; pre/post callbacks see only operations the SRM already permitted.</p>
+  <p>When a handle creation or duplication happens, <code>nt!ObpPreInterceptHandleCreate</code> walks the same <code>CallbackList</code> and calls every registered pre-operation callback. <code>ObpPostInterceptHandleCreate</code> does the same for post-operation. <strong>This walk happens after the Security Reference Monitor's access check has already approved the operation</strong>  pre/post callbacks see only operations the SRM already permitted.</p>
 
   <div class="telemetry">
-    <strong>For purple team operators:</strong> Sysmon Event ID 10 is built directly on this mechanism. When you see a Sysmon "Process Access" event for LSASS with <code>GrantedAccess: 0x1010</code>, that's an Object callback firing in <code>SysmonDrv.sys</code> reporting the handle creation. The mask field in the event log is the <em>granted</em> access after any pre-operation callbacks ran &mdash; so if an EDR stripped rights, you'll see the reduced mask, not the requested one. Useful for triage: a request that asked for <code>PROCESS_ALL_ACCESS</code> but ended up with <code>QUERY_LIMITED_INFORMATION</code> means an EDR's Ob callback intercepted the request.
+    <strong>For purple team operators:</strong> Sysmon Event ID 10 is built directly on this mechanism. When you see a Sysmon "Process Access" event for LSASS with <code>GrantedAccess: 0x1010</code>, that's an Object callback firing in <code>SysmonDrv.sys</code> reporting the handle creation. The mask field in the event log is the <em>granted</em> access after any pre-operation callbacks ran  so if an EDR stripped rights, you'll see the reduced mask, not the requested one. Useful for triage: a request that asked for <code>PROCESS_ALL_ACCESS</code> but ended up with <code>QUERY_LIMITED_INFORMATION</code> means an EDR's Ob callback intercepted the request.
   </div>
 
   <hr class="rule">
@@ -1053,7 +1053,7 @@ description: "How the Windows kernel notifies EDR drivers about process, thread,
   <h2><span class="num">§ 05</span> Registry, file, and network callbacks</h2>
   <p class="sub">Three more callback families that round out an EDR's visibility.</p>
 
-  <h3>Registry &mdash; <code>CmRegisterCallbackEx</code></h3>
+  <h3>Registry  <code>CmRegisterCallbackEx</code></h3>
 
   <p>Registers a callback that fires for nearly every registry operation: key creation, value reads, value writes, deletions, enumerations, and roughly 60 distinct sub-operation types. The full list is in the <code>REG_NOTIFY_CLASS</code> enum.</p>
 
@@ -1066,11 +1066,11 @@ description: "How the Windows kernel notifies EDR drivers about process, thread,
     <span class="k">_Reserved_</span>      <span class="t">PVOID</span>           Reserved
 );</pre>
 
-  <p>Like <code>ObRegisterCallbacks</code>, registry callbacks have <strong>pre/post variants</strong> &mdash; pre-callbacks fire before the operation, post after. Pre-callbacks <em>can fail an operation</em>: returning <code>STATUS_ACCESS_DENIED</code> from the pre-callback causes the registry op to fail with that status. This is more powerful than Object pre-callbacks (which can only modify rights, not deny outright).</p>
+  <p>Like <code>ObRegisterCallbacks</code>, registry callbacks have <strong>pre/post variants</strong>  pre-callbacks fire before the operation, post after. Pre-callbacks <em>can fail an operation</em>: returning <code>STATUS_ACCESS_DENIED</code> from the pre-callback causes the registry op to fail with that status. This is more powerful than Object pre-callbacks (which can only modify rights, not deny outright).</p>
 
   <p>Used by EDR products to detect: registry persistence (Run keys, services, scheduled tasks); credential theft (SAM hive access); known bad value patterns (Cobalt Strike beacon configs occasionally written to registry).</p>
 
-  <h3>File system &mdash; minifilters via <code>FltRegisterFilter</code></h3>
+  <h3>File system  minifilters via <code>FltRegisterFilter</code></h3>
 
   <p>The Windows Filter Manager (<code>fltmgr.sys</code>) provides a layered architecture for file system filtering. A driver registers as a <strong>minifilter</strong> with <code>FltRegisterFilter</code>, supplies a list of <code>FLT_OPERATION_REGISTRATION</code> entries (one per IRP type to filter, e.g., <code>IRP_MJ_CREATE</code>, <code>IRP_MJ_WRITE</code>), and the filter manager dispatches file operations through it.</p>
 
@@ -1082,11 +1082,11 @@ description: "How the Windows kernel notifies EDR drivers about process, thread,
     { IRP_MJ_OPERATION_END }
 };</pre>
 
-  <p>Minifilter pre-callbacks can outright deny operations (return <code>FLT_PREOP_COMPLETE</code> with a failure status). This is how Defender's <code>WdFilter.sys</code> blocks file writes that match active threat signatures &mdash; it's a minifilter intercepting every <code>IRP_MJ_WRITE</code> and scanning the bytes before letting the write through.</p>
+  <p>Minifilter pre-callbacks can outright deny operations (return <code>FLT_PREOP_COMPLETE</code> with a failure status). This is how Defender's <code>WdFilter.sys</code> blocks file writes that match active threat signatures  it's a minifilter intercepting every <code>IRP_MJ_WRITE</code> and scanning the bytes before letting the write through.</p>
 
   <p>Minifilters live in the <code>FLT_FILTER</code> structure tracked by <code>fltmgr.sys</code>. Enumerable from kernel mode (and from user mode via <code>FltEnumerateFilters</code>), with documented altitude ranges that vendors register for at WHQL signing time.</p>
 
-  <h3>Network &mdash; Windows Filtering Platform (WFP)</h3>
+  <h3>Network  Windows Filtering Platform (WFP)</h3>
 
   <p>WFP is the architectural successor to the older NDIS-level filtering. EDR drivers register <strong>callouts</strong> via <code>FwpsCalloutRegister</code> at specific filter layers (e.g., <code>FWPM_LAYER_ALE_AUTH_CONNECT_V4</code> for outbound TCP connect, <code>FWPM_LAYER_ALE_AUTH_RECV_ACCEPT_V4</code> for inbound). When a packet matches a configured filter, the kernel calls the registered callout function.</p>
 
@@ -1116,7 +1116,7 @@ description: "How the Windows kernel notifies EDR drivers about process, thread,
 
   <h3>Why arrays first, lists later</h3>
 
-  <p>The <code>Ps*</code> APIs date to NT 4.0, when callback counts were small enough that a fixed-size array was a reasonable design. <code>ObRegisterCallbacks</code> arrived in Vista SP1 with the linked-list design that better supports the altitude-based ordering. <code>CmRegisterCallback</code> followed the same pattern. Modern callback APIs &mdash; if you were designing them now &mdash; would all use altitude-ordered lists. The arrays persist for backward compatibility.</p>
+  <p>The <code>Ps*</code> APIs date to NT 4.0, when callback counts were small enough that a fixed-size array was a reasonable design. <code>ObRegisterCallbacks</code> arrived in Vista SP1 with the linked-list design that better supports the altitude-based ordering. <code>CmRegisterCallback</code> followed the same pattern. Modern callback APIs  if you were designing them now  would all use altitude-ordered lists. The arrays persist for backward compatibility.</p>
 
   <hr class="rule">
 
@@ -1124,7 +1124,7 @@ description: "How the Windows kernel notifies EDR drivers about process, thread,
   <h2><span class="num">§ 07</span> BYOVD: removing callbacks from kernel mode</h2>
   <p class="sub">EDRSandblast and the canonical attack against the entire callback model.</p>
 
-  <p>Once an attacker has kernel-mode read/write &mdash; usually via a Bring-Your-Own-Vulnerable-Driver (BYOVD) attack using a legitimately signed but exploitable driver &mdash; the entire callback model is exposed. Every structure described above is just memory; if you can write to that memory, you can remove EDR registrations.</p>
+  <p>Once an attacker has kernel-mode read/write  usually via a Bring-Your-Own-Vulnerable-Driver (BYOVD) attack using a legitimately signed but exploitable driver  the entire callback model is exposed. Every structure described above is just memory; if you can write to that memory, you can remove EDR registrations.</p>
 
   <div class="technique t3">
     <div class="head">
@@ -1178,10 +1178,10 @@ description: "How the Windows kernel notifies EDR drivers about process, thread,
 
   <h3>What this actually accomplishes</h3>
 
-  <p>After step 6 completes, when a process is created, <code>nt!PspCallProcessNotifyRoutines</code> walks the array and skips the zeroed entries. Defender's callback no longer fires. Sysmon's no longer fires. The EDR's user-mode component is still loaded, still hooking <code>ntdll</code>, still consuming whatever ETW it has access to &mdash; but its <em>kernel-side ground truth</em> has been silenced. Combined with ETW-TI disable (separate primitive: patching <code>EtwThreatIntProvRegHandle->ProviderEnableInfo</code>), the EDR loses every kernel-side telemetry source it has.</p>
+  <p>After step 6 completes, when a process is created, <code>nt!PspCallProcessNotifyRoutines</code> walks the array and skips the zeroed entries. Defender's callback no longer fires. Sysmon's no longer fires. The EDR's user-mode component is still loaded, still hooking <code>ntdll</code>, still consuming whatever ETW it has access to  but its <em>kernel-side ground truth</em> has been silenced. Combined with ETW-TI disable (separate primitive: patching <code>EtwThreatIntProvRegHandle->ProviderEnableInfo</code>), the EDR loses every kernel-side telemetry source it has.</p>
 
   <div class="margin">
-    EDRSandblast operates against three categories of EDR primitives in one tool: kernel notify-routine callbacks, object callbacks, and ETW-TI. The original disclosure (Wavestone, 2021) tested against three commercial EDR products successfully. The technique remains effective in 2026 against any product that doesn't actively monitor for tampering with its own callback structures &mdash; which is most of them. Microsoft's response has been to harden the BYOVD attack surface itself, via the Windows Vulnerable Driver Blocklist (default-on since Win 11 22H2), rather than protect the callback structures directly.
+    EDRSandblast operates against three categories of EDR primitives in one tool: kernel notify-routine callbacks, object callbacks, and ETW-TI. The original disclosure (Wavestone, 2021) tested against three commercial EDR products successfully. The technique remains effective in 2026 against any product that doesn't actively monitor for tampering with its own callback structures  which is most of them. Microsoft's response has been to harden the BYOVD attack surface itself, via the Windows Vulnerable Driver Blocklist (default-on since Win 11 22H2), rather than protect the callback structures directly.
   </div>
 
   <hr class="rule">
@@ -1206,15 +1206,15 @@ description: "How the Windows kernel notifies EDR drivers about process, thread,
 
   <h3>HVCI / Memory Integrity</h3>
 
-  <p>Hypervisor-protected Code Integrity (HVCI) uses Hyper-V's VTL1 to enforce kernel code signing at runtime via the IOMMU. Even if an attacker achieves kernel write, they cannot execute new code in kernel mode &mdash; pages remain enforce-W^X. This neutralizes shellcode-based BYOVD payloads but does NOT protect callback structures (which are data, not code). An attacker on an HVCI-enabled system can still zero out callback array entries via data writes; what they cannot do is install their own malicious kernel code.</p>
+  <p>Hypervisor-protected Code Integrity (HVCI) uses Hyper-V's VTL1 to enforce kernel code signing at runtime via the IOMMU. Even if an attacker achieves kernel write, they cannot execute new code in kernel mode  pages remain enforce-W^X. This neutralizes shellcode-based BYOVD payloads but does NOT protect callback structures (which are data, not code). An attacker on an HVCI-enabled system can still zero out callback array entries via data writes; what they cannot do is install their own malicious kernel code.</p>
 
   <h3>Microsoft Defender's "Tamper Protection"</h3>
 
-  <p>A Defender-specific layer that monitors for modifications to its own configuration (registry settings, service state) and reverts changes from non-trusted callers. Does <em>not</em> currently cover callback array integrity &mdash; if an attacker zeros out Defender's <code>WdFilter.sys</code> callback entry, Tamper Protection doesn't notice because it doesn't watch that structure.</p>
+  <p>A Defender-specific layer that monitors for modifications to its own configuration (registry settings, service state) and reverts changes from non-trusted callers. Does <em>not</em> currently cover callback array integrity  if an attacker zeros out Defender's <code>WdFilter.sys</code> callback entry, Tamper Protection doesn't notice because it doesn't watch that structure.</p>
 
   <div class="callout">
     <div class="label">honest 2026 assessment</div>
-    <p>The callback model is fundamentally a kernel-data integrity problem. PatchGuard explicitly excludes it. HVCI doesn't cover data writes. Tamper Protection doesn't watch it. The defenses that exist &mdash; WDB and HVCI &mdash; raise the cost of BYOVD but don't close the structural attack. As long as a single signed-and-not-yet-blocklisted driver with kernel R/W exists, callback removal is achievable. Microsoft's long-term direction (visible in Win 11 25H2 and Win 12 previews) is to move sensitive structures into VTL1-protected memory, but as of 2026 this hasn't shipped for callback arrays. <em>BYOVD callback removal remains an effective technique against most products.</em></p>
+    <p>The callback model is fundamentally a kernel-data integrity problem. PatchGuard explicitly excludes it. HVCI doesn't cover data writes. Tamper Protection doesn't watch it. The defenses that exist  WDB and HVCI  raise the cost of BYOVD but don't close the structural attack. As long as a single signed-and-not-yet-blocklisted driver with kernel R/W exists, callback removal is achievable. Microsoft's long-term direction (visible in Win 11 25H2 and Win 12 previews) is to move sensitive structures into VTL1-protected memory, but as of 2026 this hasn't shipped for callback arrays. <em>BYOVD callback removal remains an effective technique against most products.</em></p>
   </div>
 
   <hr class="rule">
@@ -1227,7 +1227,7 @@ description: "How the Windows kernel notifies EDR drivers about process, thread,
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
       <div class="q">Name the four canonical Ps* notification APIs and what each one watches.</div>
-      <div class="a"><code>PsSetCreateProcessNotifyRoutine{,Ex,Ex2}</code> &mdash; process creation/termination; <code>Ex</code> adds <code>PS_CREATE_NOTIFY_INFO</code> with full image path + command line + ability to block via <code>CreationStatus</code>; <code>Ex2</code> adds WSL coverage. <code>PsSetCreateThreadNotifyRoutine{,Ex}</code> &mdash; thread creation/termination; <code>Ex</code> adds thread start address. <code>PsSetLoadImageNotifyRoutine{,Ex}</code> &mdash; DLL/EXE/driver image map. All store entries in fixed-size arrays (<code>nt!PspCreate*NotifyRoutine</code>) of max 64 entries with low-3-bits flags.</div>
+      <div class="a"><code>PsSetCreateProcessNotifyRoutine{,Ex,Ex2}</code>  process creation/termination; <code>Ex</code> adds <code>PS_CREATE_NOTIFY_INFO</code> with full image path + command line + ability to block via <code>CreationStatus</code>; <code>Ex2</code> adds WSL coverage. <code>PsSetCreateThreadNotifyRoutine{,Ex}</code>  thread creation/termination; <code>Ex</code> adds thread start address. <code>PsSetLoadImageNotifyRoutine{,Ex}</code>  DLL/EXE/driver image map. All store entries in fixed-size arrays (<code>nt!PspCreate*NotifyRoutine</code>) of max 64 entries with low-3-bits flags.</div>
     </div>
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
@@ -1237,12 +1237,12 @@ description: "How the Windows kernel notifies EDR drivers about process, thread,
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
       <div class="q">In <code>nt!PspCreateProcessNotifyRoutine</code>, the array entries are not raw function pointers. What's the layout, and how do you extract the actual address?</div>
-      <div class="a">Each entry is a kernel pointer with the low 3 bits used as flag bits (encoding things like which API generation registered the callback &mdash; <code>Ex</code> vs non-<code>Ex</code>). To get the actual function address, AND with <code>0xFFFFFFFFFFFFFFF8</code>. This bitwise trick is documented in EDRSandblast's source and reproduced in multiple research blogs. The kernel does the same AND in <code>nt!PspCallProcessNotifyRoutines</code> when iterating the array.</div>
+      <div class="a">Each entry is a kernel pointer with the low 3 bits used as flag bits (encoding things like which API generation registered the callback  <code>Ex</code> vs non-<code>Ex</code>). To get the actual function address, AND with <code>0xFFFFFFFFFFFFFFF8</code>. This bitwise trick is documented in EDRSandblast's source and reproduced in multiple research blogs. The kernel does the same AND in <code>nt!PspCallProcessNotifyRoutines</code> when iterating the array.</div>
     </div>
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
       <div class="q">What can a pre-operation Object callback do, and what can it NOT do?</div>
-      <div class="a">It can <em>modify</em> the requested access rights on a handle creation or duplication &mdash; e.g., strip <code>PROCESS_VM_READ</code> from a handle being opened to LSASS. It cannot outright <em>deny</em> the handle. The Security Reference Monitor's access check has already approved the operation before the pre-callback fires; the callback only modifies the result. To block an operation entirely you need a different mechanism (process create callback's <code>CreationStatus</code>, or registry pre-callback's <code>STATUS_ACCESS_DENIED</code> return).</div>
+      <div class="a">It can <em>modify</em> the requested access rights on a handle creation or duplication  e.g., strip <code>PROCESS_VM_READ</code> from a handle being opened to LSASS. It cannot outright <em>deny</em> the handle. The Security Reference Monitor's access check has already approved the operation before the pre-callback fires; the callback only modifies the result. To block an operation entirely you need a different mechanism (process create callback's <code>CreationStatus</code>, or registry pre-callback's <code>STATUS_ACCESS_DENIED</code> return).</div>
     </div>
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
@@ -1252,17 +1252,17 @@ description: "How the Windows kernel notifies EDR drivers about process, thread,
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
       <div class="q">Why does PatchGuard not protect the kernel callback arrays?</div>
-      <div class="a">Because the arrays are designed to be modified at runtime &mdash; legitimate drivers register callbacks at load time and unregister at unload time. PatchGuard's job is to detect modifications to <em>structures that should not change</em> (SSDT, IDT, certain kernel code). The callback arrays are explicitly excluded from PatchGuard's coverage because legitimate writes happen constantly. From a BYOVD attacker's perspective, this is the structural property that makes the technique viable: the data structure is mutable by design, so PatchGuard cannot distinguish legitimate from malicious modification.</div>
+      <div class="a">Because the arrays are designed to be modified at runtime  legitimate drivers register callbacks at load time and unregister at unload time. PatchGuard's job is to detect modifications to <em>structures that should not change</em> (SSDT, IDT, certain kernel code). The callback arrays are explicitly excluded from PatchGuard's coverage because legitimate writes happen constantly. From a BYOVD attacker's perspective, this is the structural property that makes the technique viable: the data structure is mutable by design, so PatchGuard cannot distinguish legitimate from malicious modification.</div>
     </div>
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
       <div class="q">EDRSandblast removes EDR callbacks from the kernel arrays. After removal, what telemetry does the EDR still have?</div>
-      <div class="a">User-mode hooks (vol. 06) are still installed in <code>ntdll</code>, so the EDR's user-mode DLL still sees calls that go through <code>ntdll</code> &mdash; but only if the attacker doesn't direct-syscall around them. Standard ETW providers (non-TI) are still consumable. ETW-TI is also at risk &mdash; EDRSandblast's standard mode also patches the TI provider's <code>ProviderEnableInfo</code> to disable it. After full EDRSandblast execution: the EDR is effectively blind to process/thread/image creation, handle access events, and ETW-TI events. It has only its remaining user-mode visibility, which is bypassable via direct syscalls and call-stack spoofing. Cloud correlation can still notice anomalies, but local detection is largely silenced.</div>
+      <div class="a">User-mode hooks (vol. 06) are still installed in <code>ntdll</code>, so the EDR's user-mode DLL still sees calls that go through <code>ntdll</code>  but only if the attacker doesn't direct-syscall around them. Standard ETW providers (non-TI) are still consumable. ETW-TI is also at risk  EDRSandblast's standard mode also patches the TI provider's <code>ProviderEnableInfo</code> to disable it. After full EDRSandblast execution: the EDR is effectively blind to process/thread/image creation, handle access events, and ETW-TI events. It has only its remaining user-mode visibility, which is bypassable via direct syscalls and call-stack spoofing. Cloud correlation can still notice anomalies, but local detection is largely silenced.</div>
     </div>
 
     <div class="card-flip" onclick="this.classList.toggle('open')">
       <div class="q">What is the Windows Vulnerable Driver Blocklist (WDB) and what does it actually block?</div>
-      <div class="a">A Microsoft-maintained list of known-vulnerable signed drivers, shipped with Windows. Default-on since Windows 11 22H2 (and via Defender on earlier versions). When a driver in the list attempts to load, the kernel refuses. The list contains hundreds of entries including the most popular BYOVD targets (RTCore64.sys, gdrv.sys, various older Intel/AMD/MSI utility drivers). What it does <em>not</em> block: zero-day vulnerable drivers (added only after public disclosure), drivers from vendors with active ELAM signing, drivers used by enterprise software with admin-installed exemptions. The blocklist materially raises BYOVD difficulty but doesn't eliminate the technique &mdash; researchers add new vulnerable drivers to the public corpus regularly.</div>
+      <div class="a">A Microsoft-maintained list of known-vulnerable signed drivers, shipped with Windows. Default-on since Windows 11 22H2 (and via Defender on earlier versions). When a driver in the list attempts to load, the kernel refuses. The list contains hundreds of entries including the most popular BYOVD targets (RTCore64.sys, gdrv.sys, various older Intel/AMD/MSI utility drivers). What it does <em>not</em> block: zero-day vulnerable drivers (added only after public disclosure), drivers from vendors with active ELAM signing, drivers used by enterprise software with admin-installed exemptions. The blocklist materially raises BYOVD difficulty but doesn't eliminate the technique  researchers add new vulnerable drivers to the public corpus regularly.</div>
     </div>
   </div>
 
@@ -1272,10 +1272,10 @@ description: "How the Windows kernel notifies EDR drivers about process, thread,
   <h2><span class="num">§ 10</span> Closing thought</h2>
   <p>Ten volumes in. ARC III is half-built:</p>
   <ul style="font-family: var(--serif); color: var(--ink); padding-left: 24px;">
-    <li style="margin-bottom: 8px;"><strong>Vol. 09</strong> &mdash; memory: where every byte that runs has been allocated.</li>
-    <li style="margin-bottom: 8px;"><strong>Vol. 10</strong> &mdash; kernel callbacks: how the EDR knows what's happening.</li>
-    <li style="margin-bottom: 8px;"><strong>Vol. 11</strong> (next) &mdash; ETW: the providers, sessions, consumers, and the architecture of Windows telemetry.</li>
-    <li><strong>Vol. 12</strong> &mdash; PPL and BYOVD: the protection layer, how attackers attack <em>it</em>, and the kernel-side mitigations being added in 2025/2026.</li>
+    <li style="margin-bottom: 8px;"><strong>Vol. 09</strong>  memory: where every byte that runs has been allocated.</li>
+    <li style="margin-bottom: 8px;"><strong>Vol. 10</strong>  kernel callbacks: how the EDR knows what's happening.</li>
+    <li style="margin-bottom: 8px;"><strong>Vol. 11</strong> (next)  ETW: the providers, sessions, consumers, and the architecture of Windows telemetry.</li>
+    <li><strong>Vol. 12</strong>  PPL and BYOVD: the protection layer, how attackers attack <em>it</em>, and the kernel-side mitigations being added in 2025/2026.</li>
   </ul>
 
   <p style="margin-top: 24px;">If you internalize this volume, you can read any modern EDR product's marketing copy and translate it into the structural reality. "Real-time threat protection" = process callback registered. "Credential theft prevention" = object callback on <code>PsProcessType</code> stripping <code>PROCESS_VM_READ</code> from LSASS handles. "Behavioral analysis of file operations" = minifilter intercepting <code>IRP_MJ_CREATE</code> and <code>IRP_MJ_WRITE</code>. "Network exfiltration detection" = WFP callout at <code>FWPM_LAYER_ALE_AUTH_CONNECT_V4</code>. The marketing is opaque; the underlying primitives are documented and finite.</p>
@@ -1284,11 +1284,11 @@ description: "How the Windows kernel notifies EDR drivers about process, thread,
 
   <p>For detection engineers: <em>your product's resilience to BYOVD is a function of whether you monitor your own callbacks for tampering</em>. Most products don't. The structurally correct fix is for Microsoft to move callback structures into VTL1-protected memory, which is a multi-year roadmap; the tactical fix is to register a separate driver that periodically checksums your primary driver's callback registrations and screams loudly if they're tampered with.</p>
 
-  <p>Next: <em class="pen">Vol. 11 &mdash; ETW Deep Dive</em>. The other half of the kernel telemetry equation. Providers, sessions, consumers, the kernel-side architecture, ETW-TI specifically, AutoLoggers, the SecurityTrace bypass disclosed in January 2026, and the production reality of how EDRs actually consume kernel events at scale.</p>
+  <p>Next: <em class="pen">Vol. 11  ETW Deep Dive</em>. The other half of the kernel telemetry equation. Providers, sessions, consumers, the kernel-side architecture, ETW-TI specifically, AutoLoggers, the SecurityTrace bypass disclosed in January 2026, and the production reality of how EDRs actually consume kernel events at scale.</p>
 
   <footer class="end">
     <div>filed under &middot; windows internals &middot; kernel callbacks &middot; arc iii</div>
-    <div class="sig">&mdash; blacksunCUBE</div>
+    <div class="sig"> blacksunCUBE</div>
   </footer>
 
 </div>
