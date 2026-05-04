@@ -3,7 +3,7 @@ layout: page
 permalink: /about/
 title: About Me
 eyebrow: Profile
-lead: Part-Time cybersecurity researcher. Windows internals, malware analysis and purple team.
+lead: Cybersecurity researcher. Windows internals and purple team.
 ---
 
 I'm **0xAllow**, the researcher behind blacksunCUBE.
