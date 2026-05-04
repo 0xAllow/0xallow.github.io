@@ -770,21 +770,21 @@ description: "The Protected Process Light architecture, the EPROCESS.Protection 
 
   <h1>Protected Process Light &amp; Bring-Your-Own-Vulnerable-Driver,<br><em>or: the one byte that gates everything, and the only realistic way past it.</em></h1>
   <p class="dek">The kernel byte at <code>EPROCESS+0x87a</code> that decides who can touch whom. The cross-signed driver loophole that's powered every BYOVD attack since 2018. The April 2026 Microsoft patch that finally closes it. ARC III, closed.</p>
-  <div class="byline">blacksun<span style="color:var(--exec);">CUBE</span> field notebook &middot; vol. 12 &middot; <em>closes ARC III &mdash; builds on vols. 09, 10, 11</em></div>
+  <div class="byline">blacksun<span style="color:var(--exec);">CUBE</span> field notebook &middot; vol. 12 &middot; <em>closes ARC III  builds on vols. 09, 10, 11</em></div>
 
   <p>Eleven volumes have built up to this. Vol. 09 explained where bytes live. Vol. 10 explained how the kernel notifies drivers when something happens. Vol. 11 explained how the kernel publishes a stream of events for anyone authorized to read them. All three of those rely on a single concept that was deferred until now: <em>authorization</em>. Who is allowed to register kernel callbacks? Who is allowed to consume ETW-TI? Who is allowed to prevent another process from touching them?</p>
 
   <p>The answer in every case is: <strong>processes running at sufficiently high PPL</strong>. Specifically <code>PsProtectedSignerAntimalware-Light</code> for ETW-TI consumption (vol. 11), and the broader PPL hierarchy for general process protection. PPL is the trust mechanism that makes EDR architecturally possible on Windows.</p>
 
-  <p>And BYOVD &mdash; Bring Your Own Vulnerable Driver &mdash; is the only realistic, repeatable, in-the-wild attack against PPL that doesn't require a 0-day. <em>You don't bypass PPL with cleverness; you bypass it by getting kernel write</em>. Kernel write requires a driver. Drivers must be signed. Therefore: load somebody else's signed-but-vulnerable driver, exploit it, get kernel write, patch the <code>EPROCESS.Protection</code> byte to zero, kill the EDR.</p>
+  <p>And BYOVD  Bring Your Own Vulnerable Driver  is the only realistic, repeatable, in-the-wild attack against PPL that doesn't require a 0-day. <em>You don't bypass PPL with cleverness; you bypass it by getting kernel write</em>. Kernel write requires a driver. Drivers must be signed. Therefore: load somebody else's signed-but-vulnerable driver, exploit it, get kernel write, patch the <code>EPROCESS.Protection</code> byte to zero, kill the EDR.</p>
 
   <p>This volume covers four things, in this order:</p>
 
   <ol style="font-family: var(--serif); color: var(--ink); padding-left: 24px;">
-    <li style="margin-bottom: 10px;"><strong>The PPL data model</strong> &mdash; <code>EPROCESS.Protection</code>, <code>PS_PROTECTION</code> structure, the bit layout, the 8 signer levels, the access check that gates everything.</li>
-    <li style="margin-bottom: 10px;"><strong>How a process becomes PPL</strong> &mdash; ELAM-signed drivers, anti-malware service registration, the boot path that registers Defender / CrowdStrike / SentinelOne as Antimalware-Light.</li>
-    <li style="margin-bottom: 10px;"><strong>BYOVD attack mechanics in 2026</strong> &mdash; LOLDrivers ecosystem, the standard 4-step kill chain, EDR-killer commoditization (AuKill, Terminator, EDRKillShifter), specific 2025–2026 vulnerable drivers being weaponized.</li>
-    <li><strong>Defenses</strong> &mdash; Microsoft Vulnerable Driver Blocklist (WDB), HVCI, the <em>April 2026 cross-signed trust removal</em> (Microsoft's most consequential kernel security policy change in two decades), and the operational implications.</li>
+    <li style="margin-bottom: 10px;"><strong>The PPL data model</strong>  <code>EPROCESS.Protection</code>, <code>PS_PROTECTION</code> structure, the bit layout, the 8 signer levels, the access check that gates everything.</li>
+    <li style="margin-bottom: 10px;"><strong>How a process becomes PPL</strong>  ELAM-signed drivers, anti-malware service registration, the boot path that registers Defender / CrowdStrike / SentinelOne as Antimalware-Light.</li>
+    <li style="margin-bottom: 10px;"><strong>BYOVD attack mechanics in 2026</strong>  LOLDrivers ecosystem, the standard 4-step kill chain, EDR-killer commoditization (AuKill, Terminator, EDRKillShifter), specific 2025–2026 vulnerable drivers being weaponized.</li>
+    <li><strong>Defenses</strong>  Microsoft Vulnerable Driver Blocklist (WDB), HVCI, the <em>April 2026 cross-signed trust removal</em> (Microsoft's most consequential kernel security policy change in two decades), and the operational implications.</li>
   </ol>
 
   <p>Same axes:</p>
@@ -798,7 +798,7 @@ description: "The Protected Process Light architecture, the EPROCESS.Protection 
     <div class="legend-item w">
       <span class="tag">W &middot; Write</span>
       <h4>The kernel write primitive</h4>
-      <p>Achieved via BYOVD &mdash; a vulnerable signed driver exposing arbitrary write through an IOCTL. Once you have it, every PPL guarantee dissolves. Patch the byte, target's PPL is gone.</p>
+      <p>Achieved via BYOVD  a vulnerable signed driver exposing arbitrary write through an IOCTL. Once you have it, every PPL guarantee dissolves. Patch the byte, target's PPL is gone.</p>
     </div>
     <div class="legend-item x">
       <span class="tag">X &middot; Execute</span>
@@ -950,7 +950,7 @@ NTSTATUS <span class="fn">CheckPplAccess</span>(EPROCESS *requestor, EPROCESS *t
   <p>Two things worth pointing out:</p>
 
   <ul style="font-family: var(--serif); color: var(--ink); padding-left: 24px;">
-    <li style="margin-bottom: 10px;"><strong>Even SYSTEM cannot bypass this from user mode.</strong> The check is done by the kernel against the requestor's <code>EPROCESS.Protection</code>, not against its token. <code>NT AUTHORITY\SYSTEM</code> running at protection level 0 cannot open Defender (level 0x31) for read or write &mdash; the kernel returns <code>STATUS_ACCESS_DENIED</code>.</li>
+    <li style="margin-bottom: 10px;"><strong>Even SYSTEM cannot bypass this from user mode.</strong> The check is done by the kernel against the requestor's <code>EPROCESS.Protection</code>, not against its token. <code>NT AUTHORITY\SYSTEM</code> running at protection level 0 cannot open Defender (level 0x31) for read or write  the kernel returns <code>STATUS_ACCESS_DENIED</code>.</li>
     <li><strong>The check is data-driven.</strong> It reads two bytes (requestor's and target's <code>Protection</code>), compares numbers, returns. <em>If you can flip the requestor's byte to 0x72 and the target's to 0x00, every check passes.</em> That's the entire BYOVD attack model in one sentence.</li>
   </ul>
 
@@ -964,7 +964,7 @@ NTSTATUS <span class="fn">CheckPplAccess</span>(EPROCESS *requestor, EPROCESS *t
   <h2><span class="num">§ 03</span> How a process becomes PPL</h2>
   <p class="sub">The ELAM driver bootstrap. Why "Antimalware-Light" requires Microsoft's blessing.</p>
 
-  <p>You can't just call <code>SetProcessProtection(0x31)</code> &mdash; no such API exists. PPL is established at process creation time inside the kernel, based on:</p>
+  <p>You can't just call <code>SetProcessProtection(0x31)</code>  no such API exists. PPL is established at process creation time inside the kernel, based on:</p>
 
   <ol style="font-family: var(--serif); color: var(--ink); padding-left: 24px;">
     <li style="margin-bottom: 10px;"><strong>Image signature certificate.</strong> The kernel parses the binary's signature chain. The certificate must chain to a Microsoft root and contain specific OIDs (e.g., <code>1.3.6.1.4.1.311.61.4.7</code> for Antimalware) embedded by Microsoft when they sign the image.</li>
@@ -983,10 +983,10 @@ NTSTATUS <span class="fn">CheckPplAccess</span>(EPROCESS *requestor, EPROCESS *t
     <li>Configure the user-mode service to register as a PPL service via the SCM.</li>
   </ol>
 
-  <p>This is why every commercial EDR you'll encounter &mdash; Defender, CrowdStrike Falcon, SentinelOne, Cortex XDR, Elastic Defend &mdash; runs as PPL Antimalware-Light, but a script kiddie cannot trivially run as Antimalware-Light. It's gated by Microsoft's review process.</p>
+  <p>This is why every commercial EDR you'll encounter  Defender, CrowdStrike Falcon, SentinelOne, Cortex XDR, Elastic Defend  runs as PPL Antimalware-Light, but a script kiddie cannot trivially run as Antimalware-Light. It's gated by Microsoft's review process.</p>
 
   <div class="margin">
-    The certificate gating is the entire reason ETW-TI's read-side monopoly was stable from 2014 to January 2026 (vol. 11). The SecurityTrace bypass that broke that monopoly didn't break PPL itself &mdash; it found a structural way to consume TI events without being PPL. PPL itself is still an effective gate; the gate just isn't the only thing protecting the events anymore.
+    The certificate gating is the entire reason ETW-TI's read-side monopoly was stable from 2014 to January 2026 (vol. 11). The SecurityTrace bypass that broke that monopoly didn't break PPL itself  it found a structural way to consume TI events without being PPL. PPL itself is still an effective gate; the gate just isn't the only thing protecting the events anymore.
   </div>
 
   <hr class="rule">
@@ -1008,11 +1008,11 @@ NTSTATUS <span class="fn">CheckPplAccess</span>(EPROCESS *requestor, EPROCESS *t
     <tr><td>malicious</td><td>Purpose-built to disable security tools, riding on a stolen or fraudulently-obtained signing certificate.</td><td>RobbinHood ransomware's <code>gdrv.sys</code>, multiple Lazarus-attributed drivers</td></tr>
   </table>
 
-  <p>The first two categories &mdash; vulnerable and weaponizable &mdash; are the foundation of BYOVD. They're abundant: <strong>LOLDrivers project catalogs hundreds of unique vulnerable signed drivers</strong> as of 2026, and per MagicSword/LOLDrivers research published in 2026, <em>more than 81% of those samples are signed via the cross-signed root program</em> &mdash; the policy Microsoft is finally killing in April 2026 (§ 07).</p>
+  <p>The first two categories  vulnerable and weaponizable  are the foundation of BYOVD. They're abundant: <strong>LOLDrivers project catalogs hundreds of unique vulnerable signed drivers</strong> as of 2026, and per MagicSword/LOLDrivers research published in 2026, <em>more than 81% of those samples are signed via the cross-signed root program</em>  the policy Microsoft is finally killing in April 2026 (§ 07).</p>
 
   <h3>Why CRL doesn't save you</h3>
 
-  <p>From Huntress research referenced in 2026 BYOVD reporting: <em>Windows does not check Certificate Revocation Lists when loading drivers</em>. A driver signed by EnCase with a certificate revoked over 15 years ago still loads successfully on a fully-updated Windows 11. The trust model is "was this ever validly signed?" not "is the certificate currently trusted?". This is why the cross-signed-driver-trust removal (§ 07) is structural rather than incremental &mdash; it changes the trust model itself, not just the revocation list.</p>
+  <p>From Huntress research referenced in 2026 BYOVD reporting: <em>Windows does not check Certificate Revocation Lists when loading drivers</em>. A driver signed by EnCase with a certificate revoked over 15 years ago still loads successfully on a fully-updated Windows 11. The trust model is "was this ever validly signed?" not "is the certificate currently trusted?". This is why the cross-signed-driver-trust removal (§ 07) is structural rather than incremental  it changes the trust model itself, not just the revocation list.</p>
 
   <hr class="rule">
 
@@ -1020,7 +1020,7 @@ NTSTATUS <span class="fn">CheckPplAccess</span>(EPROCESS *requestor, EPROCESS *t
   <h2><span class="num">§ 05</span> The standard BYOVD kill chain</h2>
   <p class="sub">Four steps. Every modern EDR-killer follows this template.</p>
 
-  <p>From Sophos's coverage of AuKill (2023), Talos's DeadLock ransomware analysis (December 2025), Qilin BYOVD intrusions (April 2026), and the public LOLDrivers ecosystem &mdash; the attack flow is consistent. <strong>If your detection rules don't catch this 4-step sequence, you don't catch BYOVD.</strong></p>
+  <p>From Sophos's coverage of AuKill (2023), Talos's DeadLock ransomware analysis (December 2025), Qilin BYOVD intrusions (April 2026), and the public LOLDrivers ecosystem  the attack flow is consistent. <strong>If your detection rules don't catch this 4-step sequence, you don't catch BYOVD.</strong></p>
 
   <div class="flow">
     <div class="caption">BYOVD kill chain &middot; observed in AuKill, Terminator, EDRKillShifter, DeadLock, Qilin, Warlock</div>
@@ -1062,13 +1062,13 @@ NTSTATUS <span class="fn">CheckPplAccess</span>(EPROCESS *requestor, EPROCESS *t
 
   <table>
     <tr><th>Driver</th><th>Origin / CVE</th><th>Status</th></tr>
-    <tr><td><code>dbutil_2_3.sys</code></td><td>Dell (CVE-2021-21551) &mdash; the canonical example, in CISA KEV catalog</td><td>blocked by WDB; still loads on systems without HVCI</td></tr>
+    <tr><td><code>dbutil_2_3.sys</code></td><td>Dell (CVE-2021-21551)  the canonical example, in CISA KEV catalog</td><td>blocked by WDB; still loads on systems without HVCI</td></tr>
     <tr><td><code>RTCore64.sys</code></td><td>MSI Afterburner — used by Lazarus 2022, still active in 2025</td><td>WDB-blocked, but unsigned variants and renames continue</td></tr>
     <tr><td><code>sysmon.sys</code> (ThreatFire)</td><td>ThreatFire System Monitor — abused by EDRKillShifter</td><td>added to LOLDrivers after Sophos/ESET reports</td></tr>
     <tr><td><code>K7RKScan.sys</code></td><td>K7 Computing (CVE-2025-52915, CVE-2025-1055)</td><td>recent — published 2025, BlackSnufkin PoC available</td></tr>
     <tr><td><code>STProcessMonitor.sys</code></td><td>Safetica (CVE-2025-70795)</td><td>2025 disclosure, supports v11.11.4 / v11.26.18</td></tr>
     <tr><td><code>NSecKrnl.sys</code></td><td>NSEC — used by ValleyRAT in the wild</td><td>2025 ITW reproduction by BlackSnufkin</td></tr>
-    <tr><td><code>GameDriverX64.sys</code></td><td>Fedeen Games (CVE-2025-61155)</td><td>recent gaming-vendor BYOVD &mdash; gaming drivers are a growing target</td></tr>
+    <tr><td><code>GameDriverX64.sys</code></td><td>Fedeen Games (CVE-2025-61155)</td><td>recent gaming-vendor BYOVD  gaming drivers are a growing target</td></tr>
     <tr><td><code>wnbios.sys</code></td><td>various motherboard utilities — used by RealBlindingEDR</td><td>still effective on systems without HVCI as of 2026</td></tr>
   </table>
 
@@ -1123,7 +1123,7 @@ NTSTATUS <span class="fn">CheckPplAccess</span>(EPROCESS *requestor, EPROCESS *t
   <ul style="font-family: var(--serif); color: var(--ink); padding-left: 24px;">
     <li style="margin-bottom: 8px;"><strong>Ingest the LOLDrivers feed</strong> directly, don't rely on WDB alone. <code>github.com/magicsword-io/LOLDrivers</code> publishes hashes and YARA rules continuously. The ASR (Attack Surface Reduction) rule "Block abuse of exploited vulnerable signed drivers" pairs well with LOLDrivers feeds.</li>
     <li style="margin-bottom: 8px;"><strong>Watch for the kill chain pattern in § 05, not for specific driver hashes alone.</strong> File drop → service creation → driver load → security process termination, within a 5–10 minute window from the same host: that's BYOVD regardless of which specific driver was used.</li>
-    <li><strong>Out-of-band telemetry.</strong> If your EDR is what gets killed, it can't report its own death. A secondary monitor &mdash; network telemetry, separate log shipper, or backend "agent last-seen" tracking &mdash; is essential. Treat unexpected EDR silence as the alert.</li>
+    <li><strong>Out-of-band telemetry.</strong> If your EDR is what gets killed, it can't report its own death. A secondary monitor  network telemetry, separate log shipper, or backend "agent last-seen" tracking  is essential. Treat unexpected EDR silence as the alert.</li>
   </ul>
 
   <hr class="rule">
@@ -1343,7 +1343,7 @@ NTSTATUS <span class="fn">CheckPplAccess</span>(EPROCESS *requestor, EPROCESS *t
 
   <footer class="end">
     <div>filed under &middot; windows internals &middot; ppl &middot; byovd &middot; arc iii closes</div>
-    <div class="sig">&mdash; blacksunCUBE</div>
+    <div class="sig"> blacksunCUBE</div>
   </footer>
 
 </div>
