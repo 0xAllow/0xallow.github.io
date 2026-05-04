@@ -17,10 +17,10 @@ telemetry pipelines actually hold up against current adversary tooling.
 A few principles:
 
 - **Stay ethical.**
-- **Use or detect the technique, not the tool.** 
-- **Detection is only as good as the telemetry behind it**
-- **Every bypass is a hypothesis until the SIEM disagrees.**
-- **Document everything, disclose responsibly.**
+- **Focus on techniques, not tools.** 
+- **Detection quality depends on telemetry depth and fidelity.**
+- **Every bypass is a hypothesis until validated against SIEM data.**
+- **Document rigorously. Disclose responsibly.**
 
 ## Contact
 
