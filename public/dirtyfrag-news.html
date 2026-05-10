@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>DirtyFrag  How the Page-Cache Write Primitive Works | blacksunCUBE</title>
+<style>
+:root {
+  --bg:      #080b0f;
+  --surf:    #0d1117;
+  --surf2:   #111820;
+  --border:  #1c2430;
+  --accent:  #e05c2e;
+  --blue:    #4a9eff;
+  --purple:  #c97bff;
+  --green:   #3dba5e;
+  --red:     #e05555;
+  --yellow:  #f0a050;
+  --text:    #c9d3de;
+  --dim:     #4e5f70;
+  --hi:      #eef2f7;
+  --mono:    'JetBrains Mono','Fira Code',monospace;
+  --sans:    'IBM Plex Sans','Inter',system-ui,sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);
+  font-size:14px;line-height:1.8;max-width:860px;margin:0 auto;padding:0 28px 80px}
+
+/* header */
+.news-meta{
+  padding:40px 0 20px;
+  border-bottom:1px solid var(--border);
+  margin-bottom:36px;
+}
+.tag-row{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px}
+.tag{font-family:var(--mono);font-size:10px;padding:3px 9px;border-radius:3px;
+  letter-spacing:.07em;border:1px solid;font-weight:600}
+.t-news{color:var(--dim);border-color:var(--border)}
+.t-vuln{color:var(--accent);background:rgba(224,92,46,.1);border-color:rgba(224,92,46,.3)}
+.t-lpe{color:var(--purple);background:rgba(201,123,255,.1);border-color:rgba(201,123,255,.3)}
+.t-unpatched{color:var(--red);background:rgba(224,85,85,.08);border-color:rgba(224,85,85,.3)}
+.t-patched{color:var(--green);background:rgba(61,186,94,.08);border-color:rgba(61,186,94,.3)}
+
+h1{font-size:26px;font-weight:700;color:var(--hi);line-height:1.25;
+  letter-spacing:-.02em;margin-bottom:14px}
+.standfirst{font-size:15px;color:var(--text);line-height:1.7;max-width:720px;
+  margin-bottom:16px}
+.byline{font-family:var(--mono);font-size:11px;color:var(--dim);letter-spacing:.05em}
+.byline a{color:var(--blue);text-decoration:none}
+.byline a:hover{text-decoration:underline}
+
+/* body typography */
+h2{font-size:18px;font-weight:700;color:var(--hi);margin:40px 0 12px;
+  letter-spacing:-.01em;padding-top:8px;border-top:1px solid var(--border)}
+h3{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--purple);
+  text-transform:uppercase;letter-spacing:.12em;margin:28px 0 10px}
+p{font-size:14px;margin-bottom:14px;max-width:740px}
+p:last-child{margin-bottom:0}
+strong{color:var(--hi)}
+em{color:var(--yellow);font-style:normal}
+code{font-family:var(--mono);font-size:12px;background:rgba(255,255,255,.05);
+  padding:1px 6px;border-radius:3px;color:var(--yellow)}
+a{color:var(--blue);text-decoration:none}
+a:hover{text-decoration:underline}
+
+/* callouts */
+.box{border-radius:6px;padding:16px 20px;margin:20px 0;font-size:13.5px;line-height:1.7}
+.box-key{background:rgba(201,123,255,.07);border:1px solid rgba(201,123,255,.2)}
+.box-warn{background:rgba(224,92,46,.07);border:1px solid rgba(224,92,46,.2)}
+.box-info{background:rgba(74,158,255,.07);border:1px solid rgba(74,158,255,.2)}
+.box-red{background:rgba(224,85,85,.07);border:1px solid rgba(224,85,85,.2)}
+.box-label{font-family:var(--mono);font-size:10px;letter-spacing:.14em;
+  text-transform:uppercase;margin-bottom:8px;font-weight:700}
+.box-key .box-label{color:var(--purple)}
+.box-warn .box-label{color:var(--accent)}
+.box-info .box-label{color:var(--blue)}
+.box-red .box-label{color:var(--red)}
+
+/* code blocks */
+.pre-wrap{margin:20px 0}
+.pre-hdr{background:var(--surf2);border:1px solid var(--border);
+  border-radius:6px 6px 0 0;padding:7px 16px;
+  display:flex;justify-content:space-between;
+  font-family:var(--mono);font-size:10px;color:var(--dim);letter-spacing:.08em}
+pre{background:#050810;border:1px solid var(--border);border-top:none;
+  border-radius:0 0 6px 6px;padding:18px 20px;overflow-x:auto;
+  font-family:var(--mono);font-size:12px;line-height:1.75;tab-size:4;color:var(--text)}
+.kw{color:var(--purple)}.fn{color:var(--blue)}.st{color:var(--green)}
+.cm{color:#2e4055;font-style:italic}.nb{color:var(--accent)}.nu{color:var(--yellow)}
+.ty{color:#5ec4e8}.op{color:var(--dim)}
+
+/* comparison table */
+.tbl{width:100%;border-collapse:collapse;margin:20px 0;font-size:13px}
+.tbl th{background:var(--surf2);font-family:var(--mono);font-size:10px;
+  letter-spacing:.12em;text-transform:uppercase;color:var(--dim);
+  padding:10px 14px;text-align:left;border-bottom:1px solid var(--border)}
+.tbl td{padding:9px 14px;border-bottom:1px solid var(--border);vertical-align:top}
+.tbl tr:last-child td{border-bottom:none}
+.tbl td:first-child{font-family:var(--mono);font-size:11px;color:var(--purple);white-space:nowrap}
+.yes{color:var(--green);font-family:var(--mono);font-size:11px}
+.no{color:var(--red);font-family:var(--mono);font-size:11px}
+
+/* flow diagram */
+.flow{background:var(--surf);border:1px solid var(--border);border-radius:6px;
+  padding:22px 26px;margin:20px 0;font-family:var(--mono);font-size:11.5px}
+.flow-label{font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--dim);margin-bottom:16px}
+.row{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.row:last-child{margin-bottom:0}
+.node{padding:6px 13px;border-radius:4px;white-space:nowrap;font-size:11px}
+.n-k{background:rgba(224,92,46,.12);color:var(--accent);border:1px solid rgba(224,92,46,.25)}
+.n-m{background:rgba(74,158,255,.12);color:var(--blue);border:1px solid rgba(74,158,255,.25)}
+.n-s{background:rgba(201,123,255,.12);color:var(--purple);border:1px solid rgba(201,123,255,.25)}
+.n-g{background:rgba(61,186,94,.12);color:var(--green);border:1px solid rgba(61,186,94,.25)}
+.n-d{color:var(--dim);padding:6px 8px}
+.arr{color:var(--dim);font-size:13px}
+.or{display:flex;align-items:center;gap:10px;color:var(--dim);
+  font-size:10px;letter-spacing:.1em;margin:8px 0}
+.or::before,.or::after{content:'';flex:0 0 20px;height:1px;background:var(--border)}
+
+/* section divider */
+hr{border:none;border-top:1px solid var(--border);margin:40px 0}
+
+/* footer */
+.footer{border-top:1px solid var(--border);margin-top:60px;padding-top:20px;
+  font-family:var(--mono);font-size:11px;color:var(--dim);
+  display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px}
+
+@media(max-width:720px){
+  body{padding:0 16px 60px}
+  h1{font-size:20px}
+  h2{font-size:16px}
+  .footer{flex-direction:column}
+}
+@media(min-width:721px) and (max-width:920px){
+  body{padding:0 22px 70px}
+  h1{font-size:22px}
+}
+</style>
+</head>
+<body>
+
+<!-- NEWS HEADER -->
+<header class="news-meta">
+  <div class="tag-row">
+    <span class="tag t-news">news · 2026-05-10</span>
+    <span class="tag t-vuln">CVE-2026-43284</span>
+    <span class="tag t-patched">mainline patched · f4c50a4034e6</span>
+    <span class="tag t-vuln">CVE-2026-43500</span>
+    <span class="tag t-unpatched">no patch  any distro</span>
+    <span class="tag t-lpe">linux LPE</span>
+  </div>
+
+  <h1>DirtyFrag  How the Page-Cache<br>Write Primitive Works</h1>
+
+  <p class="standfirst">
+    Two independent kernel subsystems  IPsec xfrm and the RxRPC transport  contain
+    logic errors that allow an unprivileged process to write arbitrary data into the
+    kernel page cache of files it does not own. Chained together, they produce
+    a deterministic, universal local privilege escalation on every major Linux distribution.
+    This post breaks down the root cause, the exploitation logic, and what defenders should know.
+  </p>
+
+  <div class="byline">
+    blacksunCUBE · research ref ·
+    original discovery: <a href="https://x.com/v4bel" target="_blank">Hyunwoo Kim (@v4bel)</a> ·
+    <a href="https://github.com/V4bel/dirtyfrag" target="_blank">V4bel/dirtyfrag</a>
+  </div>
+</header>
+
+
+<!-- 1. BACKGROUND -->
+<h2>1. Background  the page-cache write bug class</h2>
+
+<p>
+  The Linux kernel keeps file data in an in-memory structure called the
+  <strong>page cache</strong>. When a process reads a file, the kernel maps its
+  pages into the page cache and returns data from there. Writing back to disk goes
+  through the same structure. Normally, writing to a page-cache page requires
+  appropriate permissions on the underlying file  a process cannot modify a file
+  it has no write access to.
+</p>
+
+<p>
+  The <strong>Dirty Pipe</strong> vulnerability (CVE-2022-0847, discovered 2022) proved
+  that this assumption can break: certain kernel code paths that splice network buffers
+  into file-backed pages do not always check the write-protect flag on those pages.
+  The result is an unprivileged process injecting arbitrary bytes into the page cache
+  of any readable file  including <code>/etc/passwd</code>, SUID binaries, and the vDSO.
+</p>
+
+<p>
+  <strong>DirtyFrag</strong> extends this same class. The name reflects the mechanism:
+  the vulnerability corrupts the <code>frag</code> member of <code>struct sk_buff</code>
+   the kernel's socket buffer structure. A fragment inside a socket buffer is made to
+  point at a page-cache page that belongs to a file the attacker cannot write, and then
+  a kernel operation writes into that fragment, landing the data in the wrong page.
+</p>
+
+<div class="box box-key">
+  <div class="box-label">Key distinction from Dirty Pipe</div>
+  Dirty Pipe required a <strong>race condition</strong>  a timing window between two
+  kernel operations. DirtyFrag is a <strong>deterministic logic bug</strong>: no race,
+  no timing dependency, no kernel panic on failure. The success rate is effectively 100%.
+  This makes it significantly more reliable in practice.
+</div>
+
+
+<!-- 2. THE PRIMITIVE -->
+<h2>2. The primitive  what the attacker gains</h2>
+
+<p>
+  Both CVE-2026-43284 and CVE-2026-43500 produce the same primitive:
+  the ability to <strong>write controlled bytes into the page cache of an arbitrary
+  readable file</strong>. The write bypasses file system permissions entirely because
+  it happens at the level of kernel memory, not through normal file I/O.
+</p>
+
+<p>
+  The classic exploitation target is <code>/etc/passwd</code>: the attacker overwrites
+  the root user's password hash field with the hash of a known password, then runs
+  <code>su root</code> to obtain a root shell. Alternatively, a SUID binary or the
+  vDSO page can be targeted for code injection.
+</p>
+
+<div class="pre-wrap">
+  <div class="pre-hdr"><span>C · simplified attacker-visible effect</span></div>
+<pre><span class="cm">// What the attacker controls after triggering the primitive:</span>
+<span class="cm">// a 4-byte (xfrm) or larger write into the page cache of any readable file.</span>
+
+<span class="cm">// Target: overwrite root's password hash in /etc/passwd</span>
+<span class="cm">// File is world-readable (mode 0644) but root-owned  write should be denied.</span>
+<span class="cm">// After triggering the primitive, the page cache contains attacker data.</span>
+
+<span class="ty">int</span> fd = <span class="fn">open</span>(<span class="st">"/etc/passwd"</span>, O_RDONLY);   <span class="cm">// succeeds  file is readable</span>
+<span class="cm">// ... trigger xfrm or rxrpc write path ...</span>
+<span class="cm">// page cache now contains modified password hash</span>
+<span class="cm">// next read() of /etc/passwd returns attacker-controlled data</span>
+<span class="fn">system</span>(<span class="st">"su root"</span>);  <span class="cm">// uses known hash → root shell</span></pre>
+</div>
+
+<p>
+  The write is <em>ephemeral in one sense</em>: it modifies the page cache, not the
+  on-disk file. However, on most configurations the page will eventually be written
+  back to disk, and the modification persists until the system is rebooted or the
+  page is evicted. For the purpose of obtaining a root shell, the in-memory modification
+  is sufficient.
+</p>
+
+
+<!-- 3. CVE-2026-43284 -->
+<h2>3. CVE-2026-43284  xfrm-ESP path</h2>
+
+<h3>What is xfrm?</h3>
+<p>
+  <strong>xfrm</strong> is the Linux kernel's IPsec transformation framework. It handles
+  encryption and decryption of network packets for VPN protocols. The ESP
+  (Encapsulating Security Payload) transform is responsible for encrypting and
+  authenticating packet payloads.
+</p>
+<p>
+  To use xfrm, a process sets up a <strong>Security Association (SA)</strong> and
+  a <strong>Security Policy</strong> via an <code>AF_KEY</code> socket. On most
+  distributions, an unprivileged process can do this inside a
+  <strong>user namespace</strong>  created with <code>unshare(CLONE_NEWUSER)</code>.
+</p>
+
+<h3>The root cause</h3>
+<p>
+  When the xfrm ESP transform decrypts an incoming packet, it builds a
+  <code>struct sk_buff</code> (socket buffer) to hold the decrypted data.
+  The socket buffer uses a scatter-gather array of <em>fragments</em>
+  (<code>skb_frag_t</code>). Each fragment is a reference to a memory page
+  plus an offset and a length.
+</p>
+<p>
+  The logic error occurs in the transition between the encrypted input buffer
+  and the decrypted output buffer. The kernel reuses pages from the input
+  buffer in the output fragment list without checking whether those pages
+  belong to the page cache of a file  and without verifying that the calling
+  process has write permission on that file.
+</p>
+<p>
+  An attacker can craft the situation so that the output fragment points at a
+  page-cache page of a target file. The decryption output  which the attacker
+  controls by choosing what to encrypt  is then written into that page.
+</p>
+
+<div class="flow">
+  <div class="flow-label">CVE-2026-43284  xfrm-ESP write path</div>
+  <div class="row">
+    <div class="node n-d">attacker</div>
+    <div class="arr">→</div>
+    <div class="node n-k">unshare(CLONE_NEWUSER)</div>
+    <div class="arr">→</div>
+    <div class="node n-k">create AF_KEY socket</div>
+    <div class="arr">→</div>
+    <div class="node n-k">install IPsec SA + policy</div>
+  </div>
+  <div class="row">
+    <div class="node n-m">send crafted ESP packet</div>
+    <div class="arr">→</div>
+    <div class="node n-k">xfrm_input()</div>
+    <div class="arr">→</div>
+    <div class="node n-k">esp_input_done2()</div>
+  </div>
+  <div class="row">
+    <div class="node n-s">sk_buff frag → page-cache page of /etc/passwd</div>
+    <div class="arr">→</div>
+    <div class="node n-s">decryption output written to frag</div>
+  </div>
+  <div class="row">
+    <div class="node n-g">page cache of /etc/passwd modified</div>
+    <div class="arr">→</div>
+    <div class="node n-g">su root → ✓</div>
+  </div>
+</div>
+
+<div class="box box-info">
+  <div class="box-label">Introduced / patched</div>
+  The vulnerable code path was introduced in commit
+  <code>cac2661c53f3</code> (2017-01-17) and has been present in all kernels since.
+  The mainline patch is <code>f4c50a4034e6</code>, merged into upstream.
+  As of 2026-05-10, no distribution has backported this patch.
+  The vulnerability has been in production kernels for approximately 9 years.
+</div>
+
+<h3>Constraint: namespace creation privilege</h3>
+<p>
+  Triggering the xfrm path requires <code>CLONE_NEWUSER</code>  the ability to
+  create a user namespace. This is enabled by default on most distributions.
+  <strong>Ubuntu with AppArmor</strong> can restrict this via
+  <code>apparmor_restrict_unprivileged_userns=1</code>, which blocks the xfrm path
+  on hardened Ubuntu systems. This is the reason the second CVE was needed.
+</p>
+
+
+<!-- 4. CVE-2026-43500 -->
+<h2>4. CVE-2026-43500  RxRPC path</h2>
+
+<h3>What is RxRPC?</h3>
+<p>
+  <strong>RxRPC</strong> is a reliable transport protocol used by the
+  <strong>AFS (Andrew File System)</strong> distributed filesystem. It is implemented
+  as an <code>AF_RXRPC</code> socket family in the Linux kernel. The module is
+  <code>rxrpc.ko</code>.
+</p>
+<p>
+  On most distributions, <code>rxrpc.ko</code> is not installed or not autoloaded.
+  On <strong>Ubuntu</strong>, the module is included in the default kernel package
+  and loaded automatically, making it available to any local process.
+</p>
+
+<h3>The root cause</h3>
+<p>
+  A similar fragment-reference logic error exists in the RxRPC receive path.
+  When RxRPC reassembles incoming data packets into socket buffers for delivery
+  to userspace via <code>rxrpc_recvmsg()</code>, it manages fragment lists in
+  <code>struct sk_buff</code> in a way that can cause page-cache pages of
+  unrelated files to appear as fragment destinations.
+</p>
+<p>
+  Crucially, triggering this path requires <strong>no special privileges</strong>:
+  any local user can open an <code>AF_RXRPC</code> socket and interact with it.
+  No namespace creation is involved.
+</p>
+
+<div class="flow">
+  <div class="flow-label">CVE-2026-43500  RxRPC write path</div>
+  <div class="row">
+    <div class="node n-d">attacker (any local user)</div>
+    <div class="arr">→</div>
+    <div class="node n-k">socket(AF_RXRPC, SOCK_SEQPACKET, ...)</div>
+    <div class="arr">→</div>
+    <div class="node n-k">craft RxRPC data sequence</div>
+  </div>
+  <div class="row">
+    <div class="node n-k">rxrpc_recvmsg()</div>
+    <div class="arr">→</div>
+    <div class="node n-k">rxrpc_rotate_rx_window()</div>
+    <div class="arr">→</div>
+    <div class="node n-s">sk_buff frag → page-cache page</div>
+  </div>
+  <div class="row">
+    <div class="node n-s">skb_copy_datagram_iter() writes to frag</div>
+    <div class="arr">→</div>
+    <div class="node n-g">page-cache write lands</div>
+    <div class="arr">→</div>
+    <div class="node n-g">root ✓</div>
+  </div>
+</div>
+
+<div class="box box-red">
+  <div class="box-label">Patch status  critical</div>
+  CVE-2026-43500 has been <strong>reserved for tracking</strong> but
+  <strong>no patch exists in any kernel tree</strong> as of 2026-05-10.
+  Every Ubuntu system with rxrpc.ko loaded  which is the default configuration 
+  is fully vulnerable to this path regardless of any other mitigations applied,
+  including the Copy Fail algif_aead blacklist and the xfrm patch.
+</div>
+
+
+<!-- 5. WHY CHAIN -->
+<h2>5. Why chain two vulnerabilities?</h2>
+
+<p>
+  Neither variant alone covers all targets:
+</p>
+
+<table class="tbl">
+  <thead><tr>
+    <th>scenario</th>
+    <th>CVE-2026-43284 (xfrm)</th>
+    <th>CVE-2026-43500 (rxrpc)</th>
+  </tr></thead>
+  <tbody>
+    <tr>
+      <td>standard distro (RHEL, Fedora, openSUSE)</td>
+      <td class="yes">works  namespace open</td>
+      <td class="no">rxrpc.ko absent</td>
+    </tr>
+    <tr>
+      <td>Ubuntu, no AppArmor ns restriction</td>
+      <td class="yes">works</td>
+      <td class="yes">works (rxrpc loaded)</td>
+    </tr>
+    <tr>
+      <td>Ubuntu + AppArmor restricts CLONE_NEWUSER</td>
+      <td class="no">blocked  no namespace</td>
+      <td class="yes">works  no namespace needed</td>
+    </tr>
+    <tr>
+      <td>Copy Fail algif_aead mitigation applied</td>
+      <td class="yes">unaffected  different source</td>
+      <td class="yes">unaffected</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>
+  The two variants cover each other's blind spots precisely:
+  xfrm works everywhere namespaces are open, rxrpc works on hardened Ubuntu
+  where xfrm is blocked. Together they produce a chain that succeeds on
+  <em>every major distribution</em> without exception.
+</p>
+
+<div class="flow">
+  <div class="flow-label">attacker decision logic  per target</div>
+  <div class="row">
+    <div class="node n-d">Ubuntu + AppArmor restricts CLONE_NEWUSER?</div>
+    <div class="arr">→</div>
+    <div class="node n-m" style="color:var(--blue)">use CVE-2026-43500 (rxrpc)</div>
+    <div class="arr">→</div>
+    <div class="node n-g">root ✓</div>
+  </div>
+  <div class="or">OR</div>
+  <div class="row">
+    <div class="node n-d">any other distro  namespace open</div>
+    <div class="arr">→</div>
+    <div class="node n-k">use CVE-2026-43284 (xfrm)</div>
+    <div class="arr">→</div>
+    <div class="node n-g">root ✓</div>
+  </div>
+</div>
+
+
+<!-- 6. RELATIONSHIP TO COPY FAIL -->
+<h2>6. Relationship to Copy Fail and Dirty Pipe</h2>
+
+<p>
+  <strong>Dirty Pipe (CVE-2022-0847)</strong> was the first public demonstration
+  of a page-cache write primitive in the Linux kernel. It used the
+  <code>pipe</code> + <code>splice</code> path. The fix involved correctly
+  resetting the <code>PIPE_BUF_FLAG_CAN_MERGE</code> flag.
+</p>
+<p>
+  <strong>Copy Fail</strong> found the same <em>sink</em>  the same page-cache
+  write location  via the <code>algif_aead</code> (AEAD crypto interface) source.
+  The recommended mitigation was to blacklist <code>algif_aead</code>.
+</p>
+<p>
+  <strong>CVE-2026-43284 (xfrm)</strong> shares the same sink as Copy Fail but
+  uses the xfrm ESP transform as the source. <strong>The algif_aead blacklist
+  does not block it</strong>: different source, same destination.
+  Any system that applied the Copy Fail mitigation and considered itself protected
+  remains fully vulnerable to CVE-2026-43284.
+</p>
+<p>
+  DirtyFrag is therefore not just a new vulnerability  it is the demonstration
+  that the underlying sink was never properly fixed, and that new sources
+  reaching it continue to be discoverable.
+</p>
+
+
+<!-- 7. MITIGATION -->
+<h2>7. Mitigation</h2>
+
+<p>
+  The only currently available mitigation is to prevent the vulnerable modules
+  from loading. The official command (from the researcher and linux-distros):
+</p>
+
+<div class="pre-wrap">
+  <div class="pre-hdr">
+    <span>SHELL · official mitigation  blacklist all three modules</span>
+    <span style="color:var(--green)">immediate + persistent</span>
+  </div>
+<pre>sh -c "printf 'install esp4 /bin/false\ninstall esp6 /bin/false\ninstall rxrpc /bin/false\n' \
+  > /etc/modprobe.d/dirtyfrag.conf; rmmod esp4 esp6 rxrpc 2>/dev/null; true"</pre>
+</div>
+
+<p>
+  <strong>Side effects:</strong> this disables IPsec ESP transport (esp4/esp6) and
+  the AFS/RxRPC transport (rxrpc). Evaluate operational impact before applying
+  in environments that use VPN or AFS. If IPsec is required, prioritise applying
+  the distro backport of <code>f4c50a4034e6</code> when available.
+</p>
+
+<div class="box box-warn">
+  <div class="box-label">Note on existing mitigations</div>
+  Systems that applied the <strong>Copy Fail algif_aead blacklist</strong> are
+  <strong>still vulnerable</strong> to both CVEs in DirtyFrag.
+  Systems that applied the xfrm patch (<code>f4c50a4034e6</code>) are
+  <strong>still vulnerable</strong> to CVE-2026-43500 (rxrpc, no patch exists).
+  The module blacklist is the only complete mitigation available today.
+</div>
+
+
+<!-- 8. AFFECTED VERSIONS -->
+<h2>8. Affected versions</h2>
+
+<table class="tbl">
+  <thead><tr>
+    <th>distribution</th><th>kernel tested</th>
+    <th>xfrm (43284)</th><th>rxrpc (43500)</th>
+  </tr></thead>
+  <tbody>
+    <tr><td>Ubuntu 24.04.4</td><td>6.17.0-23-generic</td>
+        <td class="no">VULN</td><td class="no">VULN</td></tr>
+    <tr><td>RHEL 10.1</td><td>6.12.0-124.49.1.el10_1</td>
+        <td class="no">VULN</td><td class="yes">module absent</td></tr>
+    <tr><td>openSUSE Tumbleweed</td><td>7.0.2-1-default</td>
+        <td class="no">VULN</td><td class="yes">module absent</td></tr>
+    <tr><td>CentOS Stream 10</td><td>6.12.0-224.el10</td>
+        <td class="no">VULN</td><td class="yes">module absent</td></tr>
+    <tr><td>AlmaLinux 10</td><td>6.12.0-124.52.3.el10_1</td>
+        <td class="no">VULN</td><td class="yes">module absent</td></tr>
+    <tr><td>Fedora 44</td><td>6.19.14-300.fc44</td>
+        <td class="no">VULN</td><td class="yes">module absent</td></tr>
+    <tr>
+      <td>xfrm window</td>
+      <td colspan="3"><code>cac2661c53f3</code> (2017-01-17) → mainline patch <code>f4c50a4034e6</code></td>
+    </tr>
+    <tr>
+      <td>rxrpc window</td>
+      <td colspan="3"><code>2dc334f1a63a</code> (2023-06) → <strong>no patch in any tree</strong> (2026-05-10)</td>
+    </tr>
+  </tbody>
+</table>
+
+
+<!-- 9. REFS -->
+<h2>9. References</h2>
+
+<ul style="list-style:none;display:flex;flex-direction:column;gap:7px;
+    font-family:var(--mono);font-size:12px">
+  <li><span style="color:var(--dim)">  [1] </span>
+      <a href="https://github.com/V4bel/dirtyfrag" target="_blank">V4bel/dirtyfrag  original PoC and write-up</a></li>
+  <li><span style="color:var(--dim)">  [2] </span>
+      <a href="https://www.openwall.com/lists/oss-security/2026/05/07/8" target="_blank">oss-security disclosure · 2026-05-07</a></li>
+  <li><span style="color:var(--dim)">  [3] </span>
+      <span style="color:var(--text)">CVE-2026-43284  xfrm-ESP · patch: </span>
+      <code>f4c50a4034e6</code> (mainline)</li>
+  <li><span style="color:var(--dim)">  [4] </span>
+      <span style="color:var(--text)">CVE-2026-43500  RxRPC · reserved · no patch (2026-05-10)</span></li>
+  <li><span style="color:var(--dim)">  [5] </span>
+      <a href="https://dirtypipe.cm4all.com/" target="_blank">Dirty Pipe (CVE-2022-0847)  bug class ancestor</a></li>
+  <li><span style="color:var(--dim)">  [6] </span>
+      <a href="https://copy.fail/" target="_blank">Copy Fail  same xfrm sink, earlier variant</a></li>
+  <li><span style="color:var(--dim)">  [7] </span>
+      <span style="color:var(--text)">xfrm vulnerable commit: </span><code>cac2661c53f3</code> · 2017-01-17</li>
+  <li><span style="color:var(--dim)">  [8] </span>
+      <span style="color:var(--text)">rxrpc vulnerable commit: </span><code>2dc334f1a63a</code> · 2023-06</li>
+</ul>
+
+<div class="footer">
+  <span>blacksunCUBE · public/news</span>
+  <span>CVE-2026-43284 · CVE-2026-43500</span>
+  <span>2026-05-10</span>
+</div>
+
+</body>
+</html>
