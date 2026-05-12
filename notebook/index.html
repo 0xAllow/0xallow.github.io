@@ -1,76 +1,132 @@
 ---
 layout: default
 permalink: /notebook/
-title: Notebook
-description: Windows internals, Assembly, offensive and defensive research.
+title: Notebook is under Maintenance
+description: The Field Notebook is being updated.
 ---
 
-<section class="section">
-  <div class="container">
+<style>
+  /* Block page access — overlay covers everything */
+  .nb-maintenance-shield {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: var(--bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    animation: nbFadeIn 0.4s ease both;
+  }
+  @keyframes nbFadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
 
-    <header class="hero" style="padding-block: var(--sp-7) var(--sp-5);">
-      <span class="hero__eyebrow">The information has been thoroughly verified, but if you spot anything I missed, please let me know.</span>
-      <h1 class="hero__title">
-        Field Notebook
-        <em style="color: var(--text-muted); font-style: normal;"></em>
-      </h1>
-      <p class="hero__lead">
-        Whatever got you into this field a course, a CTF, a curious evening 
-        the growth tends to come from the same habits: reading, breaking things
-        in a lab, writing it down, sharing. The work rewards two things:
-        curiosity and stubbornness. You won't just run tools  you'll need to
-        understand what's under them. Memory. Processes. Syscalls. The actual
-        mechanics. It's slow. You'll get stuck often. First attempts rarely
-        work. That's normal, not a signal to quit. At some point the shift
-        happens: you stop reaching for tools and start reasoning about systems.
-      </p>
-      <p style="font-family: var(--font-mono); font-size: var(--fs-micro); color: var(--text-subtle); letter-spacing: 0.04em; margin-top: var(--sp-3);">
-        Read the internals. Break something. Write it up.
-      </p>
-    </header>
+  .nb-maintenance-card {
+    max-width: 440px;
+    width: 100%;
+    padding: 40px 32px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    text-align: center;
+    box-shadow: var(--shadow-lg);
+    animation: nbRise 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  @keyframes nbRise {
+    from { opacity: 0; transform: translateY(12px) scale(0.98); }
+    to   { opacity: 1; transform: none; }
+  }
 
-    {% assign entries = site.notebook | sort: 'order' %}
+  .nb-maint-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #ff8a00;
+    margin-bottom: 16px;
+  }
+  .nb-maint-eyebrow::before {
+    content: "";
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: #ff8a00;
+    box-shadow: 0 0 0 3px rgba(255, 138, 0, 0.2);
+    animation: nbPulse 1.6s ease-in-out infinite;
+  }
+  @keyframes nbPulse {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.4; }
+  }
 
-    {% if entries.size > 0 %}
+  .nb-maint-card h1 {
+    font-size: 26px;
+    font-weight: 600;
+    letter-spacing: -0.022em;
+    line-height: 1.2;
+    margin-bottom: 12px;
+    color: var(--text);
+  }
 
-      {% assign volumes = entries | map: "volume" | uniq | sort %}
+  .nb-maint-card p {
+    font-size: 15px;
+    line-height: 1.55;
+    color: var(--text-muted);
+    margin-bottom: 24px;
+  }
 
-      {% for vol in volumes %}
-        <section class="nb-volume">
-          <header class="nb-volume__head">
-            <span class="nb-volume__label">Volume {{ vol }}</span>
-            <span class="nb-volume__line" aria-hidden="true"></span>
-          </header>
+  .nb-maint-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 11px 22px;
+    font-size: 14px;
+    font-weight: 500;
+    border: none;
+    border-radius: 999px;
+    background: var(--text);
+    color: var(--bg);
+    cursor: pointer;
+    transition: transform 180ms ease, opacity 180ms ease;
+    text-decoration: none;
+    letter-spacing: -0.005em;
+  }
+  .nb-maint-btn:hover { opacity: 0.88; }
+  .nb-maint-btn:active { transform: scale(0.97); }
+  .nb-maint-btn svg { width: 14px; height: 14px; }
 
-          <ul class="nb-grid">
-            {% assign vol_entries = entries | where: "volume", vol | sort: "order" %}
-            {% for e in vol_entries %}
-              <li class="nb-card">
-                <a class="nb-card__link"
-                   href="{{ e.url | relative_url }}"
-                   target="_blank"
-                   rel="noopener">
-                  <span class="nb-card__meta">
-                    <span class="nb-card__vol">vol. {{ e.volume }}</span>
-                    <span class="nb-card__sep" aria-hidden="true">·</span>
-                    <span class="nb-card__entry">entry {{ e.entry }}</span>
-                  </span>
-                  <h3 class="nb-card__title">{{ e.title }}</h3>
-                  {% if e.description %}<p class="nb-card__desc">{{ e.description }}</p>{% endif %}
-                  <span class="nb-card__cta">
-                    Read entry
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17L17 7"/><path d="M8 7h9v9"/></svg>
-                  </span>
-                </a>
-              </li>
-            {% endfor %}
-          </ul>
-        </section>
-      {% endfor %}
+  .nb-maint-foot {
+    margin-top: 24px;
+    padding-top: 18px;
+    border-top: 1px solid var(--border);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-subtle);
+    letter-spacing: 0.04em;
+  }
 
-    {% else %}
-      <p style="color: var(--text-muted);">No entries yet. First volume coming soon.</p>
-    {% endif %}
+  /* Prevent scrolling / accessing content behind */
+  html, body { overflow: hidden !important; }
+</style>
 
+<div class="nb-maintenance-shield" role="dialog" aria-modal="true" aria-labelledby="nb-maint-title">
+  <div class="nb-maintenance-card">
+    <span class="nb-maint-eyebrow">Maintenance</span>
+    <h1 id="nb-maint-title">Notebook is getting an update</h1>
+    <p>
+      The Field Notebook is currently being revised. New entries and
+      improvements are on the way. Thank you for your patience 
+      it will be back online shortly.
+    </p>
+    <a class="nb-maint-btn" href="{{ '/public/' | relative_url }}">
+      Continue to Public
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
+    </a>
+    <p class="nb-maint-foot">© blacksunCUBE · field notebook · be right back</p>
   </div>
-</section>
+</div>
